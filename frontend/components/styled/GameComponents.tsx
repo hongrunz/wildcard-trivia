@@ -48,3 +48,107 @@ export const BottomSection = styled.div`
   margin-top: 2rem;
 `;
 
+// Game Screen Components
+export const GameScreenContainer = styled.div`
+  min-height: 100vh;
+  background-color: #4b5563; /* gray-600 - dark gray background */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+`;
+
+export const GameCard = styled.div`
+  background-color: #e5e7eb; /* light gray */
+  width: 100%;
+  max-width: 28rem;
+  padding: 2rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 400px;
+`;
+
+export const GameHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+`;
+
+export const CircularBadge = styled.div`
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #000000;
+`;
+
+export const GameTitle = styled.h1`
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: #000000;
+  text-align: center;
+  margin: 0 0 2rem 0;
+`;
+
+export const QuestionText = styled.p`
+  font-size: 1rem;
+  color: #000000;
+  margin-bottom: 1.5rem;
+  text-align: center;
+`;
+
+export const AnswerInput = styled.input`
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #9ca3af;
+  border-radius: 0.25rem;
+  background-color: #ffffff;
+  color: #111827;
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+`;
+
+export const FeedbackMessage = styled.p`
+  font-size: 1rem;
+  font-weight: 600;
+  color: #000000;
+  text-align: center;
+  margin-bottom: 1.5rem;
+`;
+
+export const LeaderboardSection = styled.div`
+  margin-top: 2rem;
+`;
+
+export const LeaderboardHeading = styled.h2`
+  font-size: 1rem;
+  font-weight: 600;
+  color: #000000;
+  margin-bottom: 1rem;
+`;
+
+export const LeaderboardList = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+`;
+
+export const LeaderboardItem = styled.li`
+  font-size: 1rem;
+  color: #000000;
+  margin-bottom: 0.5rem;
+`;

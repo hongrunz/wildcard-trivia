@@ -18,7 +18,7 @@ ultimate-trivia/
 ## Prerequisites
 
 - **Node.js** 18+ and npm/yarn/pnpm
-- **Python** 3.8+
+- **Python** 3.14+
 - **Supabase account** (for database)
 
 ## Getting Started

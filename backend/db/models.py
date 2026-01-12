@@ -1,0 +1,84 @@
+"""
+Database models for Ultimate Trivia
+"""
+
+from datetime import datetime
+from typing import List, Optional
+from pydantic import BaseModel
+from uuid import UUID
+
+
+class RoomBase(BaseModel):
+    name: str
+    host_name: str
+    topics: List[str]
+    questions_per_round: int
+    time_per_question: int
+
+
+class RoomCreate(RoomBase):
+    host_token: str
+
+
+class Room(RoomBase):
+    room_id: UUID
+    host_token: str
+    status: str  # 'waiting', 'started', 'finished'
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PlayerBase(BaseModel):
+    player_name: str
+
+
+class PlayerCreate(PlayerBase):
+    room_id: UUID
+    player_token: str
+
+
+class Player(PlayerBase):
+    player_id: UUID
+    room_id: UUID
+    player_token: str
+    joined_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuestionBase(BaseModel):
+    question_text: str
+    options: List[str]
+    correct_answer: int
+    explanation: Optional[str] = None
+    question_index: int
+
+
+class QuestionCreate(QuestionBase):
+    room_id: UUID
+
+
+class Question(QuestionBase):
+    question_id: UUID
+    room_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class RoomWithPlayers(BaseModel):
+    """Room with related players"""
+    room: Room
+    players: List[Player]
+
+
+class RoomWithQuestions(BaseModel):
+    """Room with related questions"""
+    room: Room
+    questions: List[Question]

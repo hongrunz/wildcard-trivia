@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   PageContainer,
   FormCard,
@@ -16,6 +16,7 @@ import {
 import { api, tokenStorage } from '../lib/api';
 
 export default function JoinGame() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get('roomId') || '';
   const [guestName, setGuestName] = useState('');
@@ -42,11 +43,8 @@ export default function JoinGame() {
       // Store player token
       tokenStorage.setPlayerToken(roomId, response.playerToken);
 
-      // Navigate to waiting room or game view
-      // For now, show success message
-      alert(`Successfully joined room ${roomId}!`);
-      // TODO: Navigate to game/waiting room view when implemented
-      // router.push(`/room/${roomId}`);
+      // Navigate to game view
+      router.push(`/game/${roomId}`);
     } catch (err) {
       console.error('Error joining room:', err);
       setError(err instanceof Error ? err.message : 'Failed to join room. Please try again.');
