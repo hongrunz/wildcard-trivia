@@ -2,10 +2,13 @@
 FastAPI application main file
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
+from uuid import UUID
 
 from apis.rooms import router as rooms_router
+from db.store import RoomStore, PlayerStore
 
 app = FastAPI(
     title="Ultimate Trivia API",

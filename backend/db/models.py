@@ -45,6 +45,7 @@ class Player(PlayerBase):
     player_id: UUID
     room_id: UUID
     player_token: str
+    score: int = 0
     joined_at: datetime
 
     class Config:

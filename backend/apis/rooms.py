@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from db.store import RoomStore, PlayerStore, QuestionStore
 from db.models import Room, Player, Question
-from apis.questions import generate_sample_questions
+from apis.llm.prompts import generate_questions_with_llm
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -40,6 +40,7 @@ class JoinRoomResponse(BaseModel):
 class PlayerResponse(BaseModel):
     playerId: str
     playerName: str
+    score: int = 0
     joinedAt: str
 
 
@@ -122,6 +123,7 @@ async def get_room(room_id: str):
             PlayerResponse(
                 playerId=str(p.player_id),
                 playerName=p.player_name,
+                score=p.score if hasattr(p, 'score') else 0,
                 joinedAt=p.joined_at.isoformat()
             )
             for p in players
@@ -217,7 +219,7 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
             raise HTTPException(status_code=400, detail="Cannot start game without players")
         
         # Generate questions
-        sample_questions = generate_sample_questions(room.topics, room.questions_per_round)
+        sample_questions = generate_questions_with_llm(room.topics, room.questions_per_round)
         
         # Create questions in database
         from db.models import QuestionCreate
@@ -251,6 +253,122 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
             questionsCount=len(sample_questions),
             playerToken=host_player.player_token if host_player else None
         )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid room ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SubmitAnswerRequest(BaseModel):
+    questionId: str
+    answer: str
+
+
+class SubmitAnswerResponse(BaseModel):
+    success: bool
+    isCorrect: bool
+    correctAnswer: str
+    points: int
+    currentScore: int
+
+
+@router.post("/{room_id}/submit-answer", response_model=SubmitAnswerResponse)
+async def submit_answer(
+    room_id: str,
+    request: SubmitAnswerRequest,
+    playerToken: Optional[str] = Header(None, alias="playertoken")
+):
+    """Submit an answer and update player score"""
+    try:
+        if not playerToken:
+            raise HTTPException(status_code=401, detail="Player token required")
+        
+        room_uuid = UUID(room_id)
+        room = RoomStore.get_room(room_uuid)
+        
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+        
+        if room.status != "started":
+            raise HTTPException(status_code=400, detail="Game is not in progress")
+        
+        # Get player by token
+        player = PlayerStore.get_player_by_token(playerToken)
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        if player.room_id != room_uuid:
+            raise HTTPException(status_code=403, detail="Player does not belong to this room")
+        
+        # Get the question
+        question_uuid = UUID(request.questionId)
+        questions = QuestionStore.get_questions_by_room(room_uuid)
+        question = next((q for q in questions if str(q.question_id) == request.questionId), None)
+        
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        
+        # Check if answer is correct
+        correct_answer_option = question.options[question.correct_answer]
+        is_correct = request.answer.lower().strip() == correct_answer_option.lower().strip()
+        
+        # Update score: 1 point for correct answer
+        points = 1 if is_correct else 0
+        if points > 0:
+            updated_player = PlayerStore.update_player_score(player.player_id, points)
+            current_score = updated_player.score
+        else:
+            current_score = player.score
+        
+        return SubmitAnswerResponse(
+            success=True,
+            isCorrect=is_correct,
+            correctAnswer=correct_answer_option,
+            points=points,
+            currentScore=current_score
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid room ID or question ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class LeaderboardEntry(BaseModel):
+    playerId: str
+    score: int
+
+
+class LeaderboardResponse(BaseModel):
+    leaderboard: list[LeaderboardEntry]
+
+
+@router.get("/{room_id}/leaderboard", response_model=LeaderboardResponse)
+async def get_leaderboard(room_id: str):
+    """Get the leaderboard for a room"""
+    try:
+        room_uuid = UUID(room_id)
+        room = RoomStore.get_room(room_uuid)
+        
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+        
+        # Get all players in the room
+        players = PlayerStore.get_players_by_room(room_uuid)
+        
+        # Sort by score (descending) and create leaderboard entries
+        leaderboard_entries = [
+            LeaderboardEntry(
+                playerId=str(p.player_id),
+                score=p.score if hasattr(p, 'score') else 0
+            )
+            for p in sorted(players, key=lambda x: (x.score if hasattr(x, 'score') else 0), reverse=True)
+        ]
+        
+        return LeaderboardResponse(leaderboard=leaderboard_entries)
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid room ID")
     except HTTPException:

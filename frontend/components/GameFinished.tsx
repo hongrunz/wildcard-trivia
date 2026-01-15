@@ -47,7 +47,6 @@ export default function GameFinished({
             ))}
           </LeaderboardList>
         </LeaderboardSection>
-        <ButtonPrimary onClick={handleNewGame}>New Game</ButtonPrimary>
       </GameCard>
     </GameScreenContainer>
   );

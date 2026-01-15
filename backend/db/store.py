@@ -101,6 +101,7 @@ class PlayerStore:
             "room_id": str(room_id),
             "player_name": player_name,
             "player_token": player_token,
+            "score": 0,
         }
         
         result = client.table("players").insert(player_dict).execute()
@@ -128,6 +129,40 @@ class PlayerStore:
         client = get_supabase_client()
         
         result = client.table("players").select("*").eq("player_token", player_token).execute()
+        
+        if not result.data:
+            return None
+        
+        return Player(**result.data[0])
+    
+    @staticmethod
+    def update_player_score(player_id: UUID, points: int) -> Player:
+        """Update player score by adding points"""
+        client = get_supabase_client()
+        
+        # Get current player to check current score
+        current_player = client.table("players").select("score").eq("player_id", str(player_id)).execute()
+        
+        if not current_player.data:
+            raise ValueError(f"Player {player_id} not found")
+        
+        current_score = current_player.data[0].get("score", 0) or 0
+        new_score = current_score + points
+        
+        # Update the score
+        result = client.table("players").update({"score": new_score}).eq("player_id", str(player_id)).execute()
+        
+        if not result.data:
+            raise ValueError(f"Failed to update player score")
+        
+        return Player(**result.data[0])
+    
+    @staticmethod
+    def get_player_by_id(player_id: UUID) -> Optional[Player]:
+        """Get a player by ID"""
+        client = get_supabase_client()
+        
+        result = client.table("players").select("*").eq("player_id", str(player_id)).execute()
         
         if not result.data:
             return None

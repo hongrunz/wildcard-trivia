@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS players (
     room_id UUID NOT NULL REFERENCES rooms(room_id) ON DELETE CASCADE,
     player_name VARCHAR(255) NOT NULL,
     player_token VARCHAR(255) NOT NULL UNIQUE,
+    score INTEGER NOT NULL DEFAULT 0,
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(room_id, player_name)
 );

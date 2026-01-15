@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   GameScreenContainer,
   GameCard,
@@ -8,15 +8,15 @@ import {
   CircularBadge,
   GameTitle,
   QuestionText,
-  AnswerInput,
 } from './styled/GameComponents';
-import { ButtonLarge, ButtonContainerCenter } from './styled/FormComponents';
+import { OptionsContainer, OptionButton } from './styled/OptionsContainer';
 
 interface QuestionScreenProps {
   currentQuestion: number;
   totalQuestions: number;
   timer?: number;
   question: string;
+  options: string[];
   onSubmit: (answer: string) => void;
 }
 
@@ -25,42 +25,47 @@ export default function QuestionScreen({
   totalQuestions,
   timer,
   question,
+  options,
   onSubmit,
 }: QuestionScreenProps) {
-  const [answer, setAnswer] = useState('');
+  const [mounted, setMounted] = useState(false);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
 
-  const handleSubmit = () => {
-    if (answer.trim()) {
-      onSubmit(answer.trim());
-    }
+  // Set mounted to true after component mounts to prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleOptionClick = (option: string) => {
+    setSelectedOption(option);
+    onSubmit(option);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSubmit();
-    }
-  };
+  // Ensure options has a default value
+  const safeOptions = options || [];
 
   return (
     <GameScreenContainer>
       <GameCard>
         <GameHeader>
           <CircularBadge>{currentQuestion}/{totalQuestions}</CircularBadge>
-          {timer !== undefined && <CircularBadge>{timer}</CircularBadge>}
+          {mounted && timer !== undefined && <CircularBadge>{timer}</CircularBadge>}
         </GameHeader>
         <GameTitle>Ultimate Trivia!</GameTitle>
         <QuestionText>{question}</QuestionText>
-        <AnswerInput
-          type="text"
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Enter your answer"
-          autoFocus
-        />
-        <ButtonContainerCenter>
-          <ButtonLarge onClick={handleSubmit}>Submit</ButtonLarge>
-        </ButtonContainerCenter>
+        {safeOptions.length > 0 && (
+          <OptionsContainer>
+            {safeOptions.map((option, index) => (
+              <OptionButton
+                key={index}
+                onClick={() => handleOptionClick(option)}
+                disabled={selectedOption !== null}
+              >
+                {option}
+              </OptionButton>
+            ))}
+          </OptionsContainer>
+        )}
       </GameCard>
     </GameScreenContainer>
   );

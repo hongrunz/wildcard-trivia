@@ -28,6 +28,7 @@ export interface JoinRoomResponse {
 export interface Player {
   playerId: string;
   playerName: string;
+  score?: number;
   joinedAt: string;
 }
 
@@ -58,6 +59,28 @@ export interface StartGameResponse {
   message: string;
   questionsCount: number;
   playerToken?: string;
+}
+
+export interface LeaderboardEntry {
+  playerId: string;
+  score: number;
+}
+
+export interface LeaderboardResponse {
+  leaderboard: LeaderboardEntry[];
+}
+
+export interface SubmitAnswerRequest {
+  questionId: string;
+  answer: string;
+}
+
+export interface SubmitAnswerResponse {
+  success: boolean;
+  isCorrect: boolean;
+  correctAnswer: string;
+  points: number;
+  currentScore: number;
 }
 
 async function fetchAPI<T>(
@@ -119,6 +142,26 @@ export const api = {
       headers: {
         hostToken: hostToken,
       },
+    });
+  },
+
+  /**
+   * Get leaderboard for a room
+   */
+  async getLeaderboard(roomId: string): Promise<LeaderboardResponse> {
+    return fetchAPI<LeaderboardResponse>(`/api/rooms/${roomId}/leaderboard`);
+  },
+
+  /**
+   * Submit an answer
+   */
+  async submitAnswer(roomId: string, playerToken: string, questionId: string, answer: string): Promise<SubmitAnswerResponse> {
+    return fetchAPI<SubmitAnswerResponse>(`/api/rooms/${roomId}/submit-answer`, {
+      method: 'POST',
+      headers: {
+        playerToken: playerToken,
+      },
+      body: JSON.stringify({ questionId, answer }),
     });
   },
 };

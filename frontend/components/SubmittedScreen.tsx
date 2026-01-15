@@ -1,5 +1,6 @@
 'use client';
 
+import { Text } from './styled/FormComponents';
 import {
   GameScreenContainer,
   GameCard,
@@ -24,7 +25,8 @@ interface SubmittedScreenProps {
   currentQuestion: number;
   totalQuestions: number;
   isCorrect: boolean;
-  submittedAnswer: string;
+  correctAnswer: string;
+  explanation: string;
   leaderboard: LeaderboardEntry[];
 }
 
@@ -32,7 +34,8 @@ export default function SubmittedScreen({
   currentQuestion,
   totalQuestions,
   isCorrect,
-  submittedAnswer,
+  correctAnswer,
+  explanation,
   leaderboard,
 }: SubmittedScreenProps) {
   return (
@@ -47,9 +50,10 @@ export default function SubmittedScreen({
         </FeedbackMessage>
         <AnswerInput
           type="text"
-          value={submittedAnswer}
+          value={correctAnswer}
           readOnly
         />
+        <Text>Explanation: {explanation}</Text>
         <LeaderboardSection>
           <LeaderboardHeading>Leader board:</LeaderboardHeading>
           <LeaderboardList>

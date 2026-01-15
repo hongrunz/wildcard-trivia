@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import QuestionScreen from './QuestionScreen';
 import SubmittedScreen from './SubmittedScreen';
 import GameFinished from './GameFinished';
-import { api, tokenStorage, RoomResponse, Question } from '../lib/api';
+import { api, tokenStorage, RoomResponse, LeaderboardResponse } from '../lib/api';
 
 interface PlayerGameProps {
   roomId: string;
@@ -22,9 +22,9 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [gameState, setGameState] = useState<GameState>('question');
-  const [submittedAnswer, setSubmittedAnswer] = useState('');
   const [isCorrect, setIsCorrect] = useState(false);
   const [timer, setTimer] = useState<number | undefined>(undefined);
+  const [score, setScore] = useState(0); // Track player's score: 1 point per correct answer
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -36,7 +36,19 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     // Poll for room updates
     const interval = setInterval(fetchRoom, 2000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
+
+  // Poll for leaderboard updates when game is active
+  useEffect(() => {
+    if (room && (room.status === 'started' || room.status === 'finished')) {
+      fetchLeaderboard();
+      // Poll leaderboard every 2 seconds
+      const interval = setInterval(fetchLeaderboard, 2000);
+      return () => clearInterval(interval);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room?.status, roomId]);
 
   const fetchRoom = async () => {
     try {
@@ -47,13 +59,13 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       if (roomData.status === 'started' && roomData.questions) {
         setIsLoading(false);
         
-        // Update leaderboard (mock for now - will need API endpoint)
-        updateLeaderboard(roomData);
+        // Fetch leaderboard from API
+        fetchLeaderboard();
       } else if (roomData.status === 'finished') {
         setGameState('finished');
         setIsLoading(false);
-        // Update leaderboard for finished game
-        updateLeaderboard(roomData);
+        // Fetch leaderboard for finished game
+        fetchLeaderboard();
       }
     } catch (err) {
       console.error('Error fetching room:', err);
@@ -62,45 +74,109 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     }
   };
 
-  const updateLeaderboard = (roomData: RoomResponse) => {
-    // Mock leaderboard - in real implementation, this would come from API
-    const mockLeaderboard: LeaderboardEntry[] = roomData.players
-      .map((player, index) => ({
-        rank: index + 1,
-        playerName: player.playerName,
-        points: Math.floor(Math.random() * 100), // Mock points
-      }))
-      .sort((a, b) => b.points - a.points)
-      .map((entry, index) => ({ ...entry, rank: index + 1 }))
-      .slice(0, 3); // Top 3
-
-    setLeaderboard(mockLeaderboard);
+  const fetchLeaderboard = async () => {
+    try {
+      const leaderboardData: LeaderboardResponse = await api.getLeaderboard(roomId);
+      
+      // Get current room data to map player IDs to names
+      const currentRoom = room;
+      if (!currentRoom) {
+        // If room not loaded yet, fetch it
+        const roomData = await api.getRoom(roomId);
+        setRoom(roomData);
+        
+        // Create a map of playerId to playerName
+        const playerMap = new Map<string, string>();
+        roomData.players.forEach(player => {
+          playerMap.set(player.playerId, player.playerName);
+        });
+        
+        // Map API leaderboard to UI format with player names and ranks
+        const formattedLeaderboard: LeaderboardEntry[] = leaderboardData.leaderboard.map((entry, index) => ({
+          rank: index + 1,
+          playerName: playerMap.get(entry.playerId) || `Player ${entry.playerId.slice(0, 8)}`,
+          points: entry.score,
+        }));
+        
+        setLeaderboard(formattedLeaderboard);
+      } else {
+        // Create a map of playerId to playerName from current room data
+        const playerMap = new Map<string, string>();
+        currentRoom.players.forEach(player => {
+          playerMap.set(player.playerId, player.playerName);
+        });
+        
+        // Map API leaderboard to UI format with player names and ranks
+        const formattedLeaderboard: LeaderboardEntry[] = leaderboardData.leaderboard.map((entry, index) => ({
+          rank: index + 1,
+          playerName: playerMap.get(entry.playerId) || `Player ${entry.playerId.slice(0, 8)}`,
+          points: entry.score,
+        }));
+        
+        setLeaderboard(formattedLeaderboard);
+      }
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
+      // Fallback to empty leaderboard on error
+      setLeaderboard([]);
+    }
   };
 
   const handleSubmitAnswer = async (answer: string) => {
-    if (!room || !room.questions) return;
+    if (!room || !room.questions || !playerToken) return;
 
     const currentQuestion = room.questions[currentQuestionIndex];
-    const correct = answer.toLowerCase().trim() === currentQuestion.options[currentQuestion.correctAnswer].toLowerCase().trim();
-
-    setSubmittedAnswer(answer);
-    setIsCorrect(correct);
-    setGameState('submitted');
-
-    // TODO: Submit answer to API when endpoint is available
-    // await api.submitAnswer(roomId, playerToken, currentQuestion.id, answer);
-
-    // Auto-advance to next question after 3 seconds (or wait for all players)
-    setTimeout(() => {
-      if (currentQuestionIndex < room.questions.length - 1) {
-        setCurrentQuestionIndex((prev) => prev + 1);
-        setGameState('question');
-        setSubmittedAnswer('');
-      } else {
-        // Game finished
-        setGameState('finished');
+    
+    try {
+      // Submit answer to API
+      const response = await api.submitAnswer(roomId, playerToken, currentQuestion.id, answer);
+      
+      // Update local score state
+      if (response.isCorrect) {
+        setScore(response.currentScore);
       }
-    }, 3000);
+      
+      setIsCorrect(response.isCorrect);
+      setGameState('submitted');
+      
+      // Refresh leaderboard after submitting answer
+      fetchLeaderboard();
+      
+      // Auto-advance to next question after 7 seconds (or wait for all players)
+      setTimeout(() => {
+        if (!room || !room.questions) return;
+        if (currentQuestionIndex < room.questions.length - 1) {
+          setCurrentQuestionIndex((prev) => prev + 1);
+          setGameState('question');
+          // Refresh leaderboard when moving to next question
+          fetchLeaderboard();
+        } else {
+          // Game finished - fetch final leaderboard
+          fetchLeaderboard();
+          setGameState('finished');
+        }
+      }, 7000);
+    } catch (err) {
+      console.error('Error submitting answer:', err);
+      // Fallback to local check if API fails
+      const correct = answer.toLowerCase().trim() === currentQuestion.options[currentQuestion.correctAnswer].toLowerCase().trim();
+      if (correct) {
+        setScore((prevScore) => prevScore + 1);
+      }
+      setIsCorrect(correct);
+      setGameState('submitted');
+      
+      setTimeout(() => {
+        if (!room || !room.questions) return;
+        if (currentQuestionIndex < room.questions.length - 1) {
+          setCurrentQuestionIndex((prev) => prev + 1);
+          setGameState('question');
+        } else {
+          fetchLeaderboard();
+          setGameState('finished');
+        }
+      }, 7000);
+    }
   };
 
   // Start timer when question is shown
@@ -124,21 +200,21 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   // Auto-submit when timer reaches 0
   useEffect(() => {
     if (timer === 0 && gameState === 'question' && room && room.questions && currentQuestionIndex < room.questions.length) {
-      const currentQuestion = room.questions[currentQuestionIndex];
       const correct = false; // Timeout means wrong
-      setSubmittedAnswer('');
       setIsCorrect(correct);
       setGameState('submitted');
       
       setTimeout(() => {
+        if (!room || !room.questions) return;
         if (currentQuestionIndex < room.questions.length - 1) {
           setCurrentQuestionIndex((prev) => prev + 1);
           setGameState('question');
-          setSubmittedAnswer('');
         } else {
+          // Game finished - fetch final leaderboard
+          fetchLeaderboard();
           setGameState('finished');
         }
-      }, 3000);
+      }, 7000);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer]);
@@ -195,7 +271,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     return (
       <GameFinished
         totalQuestions={room.questionsPerRound}
-        finalScore={timer}
+        finalScore={score}
         leaderboard={leaderboard}
       />
     );
@@ -207,7 +283,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
         currentQuestion={currentQuestionIndex + 1}
         totalQuestions={room.questionsPerRound}
         isCorrect={isCorrect}
-        submittedAnswer={submittedAnswer}
+        correctAnswer={currentQuestion?.options?.[currentQuestion.correctAnswer] || ''}
+        explanation={currentQuestion?.explanation || ''}
         leaderboard={leaderboard}
       />
     );
@@ -219,6 +296,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       totalQuestions={room.questionsPerRound}
       timer={timer}
       question={questionText}
+      options={currentQuestion.options || []}
       onSubmit={handleSubmitAnswer}
     />
   );

@@ -191,3 +191,7 @@ export const HelperText = styled.span`
   font-size: 0.875rem; /* text-sm */
 `;
 
+export const Text = styled.p`
+  color: #4b5563; /* gray-600 */
+  font-size: 0.875rem; /* text-sm */
+`;
