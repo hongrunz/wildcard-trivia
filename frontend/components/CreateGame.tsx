@@ -15,12 +15,15 @@ import {
 } from './styled/FormComponents';
 import { api, tokenStorage } from '../lib/api';
 
+const DEFAULT_NUM_QUESTIONS = 10;
+const DEFAULT_TIME_LIMIT = 30;
+
 export default function CreateGame() {
   const router = useRouter();
   const [hostName, setHostName] = useState('');
   const [topic, setTopic] = useState('');
-  const [numQuestions, setNumQuestions] = useState(10);
-  const [timeLimit, setTimeLimit] = useState(60);
+  const [numQuestions, setNumQuestions] = useState(DEFAULT_NUM_QUESTIONS);
+  const [timeLimit, setTimeLimit] = useState(DEFAULT_TIME_LIMIT);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 

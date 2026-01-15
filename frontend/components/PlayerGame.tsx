@@ -142,20 +142,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       // Refresh leaderboard after submitting answer
       fetchLeaderboard();
       
-      // Auto-advance to next question after 7 seconds (or wait for all players)
-      setTimeout(() => {
-        if (!room || !room.questions) return;
-        if (currentQuestionIndex < room.questions.length - 1) {
-          setCurrentQuestionIndex((prev) => prev + 1);
-          setGameState('question');
-          // Refresh leaderboard when moving to next question
-          fetchLeaderboard();
-        } else {
-          // Game finished - fetch final leaderboard
-          fetchLeaderboard();
-          setGameState('finished');
-        }
-      }, 7000);
+      // Don't auto-advance - wait for timer to expire
     } catch (err) {
       console.error('Error submitting answer:', err);
       // Fallback to local check if API fails
@@ -166,16 +153,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       setIsCorrect(correct);
       setGameState('submitted');
       
-      setTimeout(() => {
-        if (!room || !room.questions) return;
-        if (currentQuestionIndex < room.questions.length - 1) {
-          setCurrentQuestionIndex((prev) => prev + 1);
-          setGameState('question');
-        } else {
-          fetchLeaderboard();
-          setGameState('finished');
-        }
-      }, 7000);
+      // Don't auto-advance - wait for timer to expire
     }
   };
 
@@ -183,6 +161,12 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   useEffect(() => {
     if (gameState === 'question' && room?.timePerQuestion) {
       setTimer(room.timePerQuestion);
+    }
+  }, [gameState, currentQuestionIndex, room?.timePerQuestion]);
+
+  // Timer countdown - continues even after submission
+  useEffect(() => {
+    if (timer !== undefined && timer > 0 && (gameState === 'question' || gameState === 'submitted')) {
       const interval = setInterval(() => {
         setTimer((prev) => {
           if (prev === undefined || prev <= 1) {
@@ -195,26 +179,33 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
 
       return () => clearInterval(interval);
     }
-  }, [gameState, currentQuestionIndex, room?.timePerQuestion]);
+  }, [timer, gameState]);
 
-  // Auto-submit when timer reaches 0
+  // Advance to next question when timer reaches 0 (whether user submitted or timed out)
   useEffect(() => {
-    if (timer === 0 && gameState === 'question' && room && room.questions && currentQuestionIndex < room.questions.length) {
-      const correct = false; // Timeout means wrong
-      setIsCorrect(correct);
-      setGameState('submitted');
+    if (timer === 0 && room && room.questions && currentQuestionIndex < room.questions.length) {
+      // If user hasn't submitted yet, auto-submit as wrong
+      if (gameState === 'question') {
+        const correct = false; // Timeout means wrong
+        setIsCorrect(correct);
+        setGameState('submitted');
+      }
       
+      // Advance to next question after timer expires
       setTimeout(() => {
         if (!room || !room.questions) return;
         if (currentQuestionIndex < room.questions.length - 1) {
           setCurrentQuestionIndex((prev) => prev + 1);
           setGameState('question');
+          setTimer(undefined); // Reset timer for next question
+          // Refresh leaderboard when moving to next question
+          fetchLeaderboard();
         } else {
           // Game finished - fetch final leaderboard
           fetchLeaderboard();
           setGameState('finished');
         }
-      }, 7000);
+      }, 2000); // Brief delay before advancing
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer]);
@@ -286,6 +277,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
         correctAnswer={currentQuestion?.options?.[currentQuestion.correctAnswer] || ''}
         explanation={currentQuestion?.explanation || ''}
         leaderboard={leaderboard}
+        timer={timer}
       />
     );
   }

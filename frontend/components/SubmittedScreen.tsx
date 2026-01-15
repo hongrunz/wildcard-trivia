@@ -28,6 +28,7 @@ interface SubmittedScreenProps {
   correctAnswer: string;
   explanation: string;
   leaderboard: LeaderboardEntry[];
+  timer?: number;
 }
 
 export default function SubmittedScreen({
@@ -37,12 +38,14 @@ export default function SubmittedScreen({
   correctAnswer,
   explanation,
   leaderboard,
+  timer,
 }: SubmittedScreenProps) {
   return (
     <GameScreenContainer>
       <GameCard>
         <GameHeader>
           <CircularBadge>{currentQuestion}/{totalQuestions}</CircularBadge>
+          {timer !== undefined && <CircularBadge>{timer}</CircularBadge>}
         </GameHeader>
         <GameTitle>Ultimate Trivia!</GameTitle>
         <FeedbackMessage>
