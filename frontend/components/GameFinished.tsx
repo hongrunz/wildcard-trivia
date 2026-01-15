@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import {
   GameScreenContainer,
   GameCard,
@@ -11,6 +12,7 @@ import {
   LeaderboardList,
   LeaderboardItem,
 } from './styled/GameComponents';
+import { ButtonLarge, ButtonContainerCenter } from './styled/FormComponents';
 
 interface LeaderboardEntry {
   rank: number;
@@ -29,6 +31,12 @@ export default function GameFinished({
   finalScore,
   leaderboard,
 }: GameFinishedProps) {
+  const router = useRouter();
+
+  const handleNewGame = () => {
+    router.push('/');
+  };
+
   return (
     <GameScreenContainer>
       <GameCard>
@@ -47,6 +55,9 @@ export default function GameFinished({
             ))}
           </LeaderboardList>
         </LeaderboardSection>
+        <ButtonContainerCenter>
+          <ButtonLarge onClick={handleNewGame}>New Game</ButtonLarge>
+        </ButtonContainerCenter>
       </GameCard>
     </GameScreenContainer>
   );
