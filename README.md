@@ -11,8 +11,8 @@ ultimate-trivia/
 │   └── lib/          # Frontend utilities (API client)
 ├── app/              # Next.js routes (App Router)
 ├── backend/          # Python FastAPI backend
-│   ├── redis/          # Database models, store, and client
-│   └── apis/        # API endpoints and business logic
+│   ├── storage/       # Redis database models, store, and client
+│   └── apis/          # API endpoints and business logic
 ```
 
 ## Prerequisites
@@ -160,8 +160,198 @@ Once the backend is running, you can access:
 
 - **Backend API Docs**: See `backend/README.md` for API endpoint documentation
 
+## Working with Redis
+
+### Redis Data Structure
+
+The application uses the following Redis data structures:
+
+- **Rooms**: Stored as Redis hashes (`room:{room_id}`)
+- **Players**: Stored as Redis hashes (`player:{player_id}`)
+- **Room Players**: Sets tracking players in each room (`room:{room_id}:players`)
+- **Questions**: Lists stored as JSON strings (`room:{room_id}:questions`)
+- **Leaderboard**: Sorted sets (ZSET) for automatic score sorting (`room:{room_id}:scores`)
+- **Token Mappings**: String keys for fast lookups (`host_token:{token}`, `player_token:{token}`)
+
+### Viewing Redis Data
+
+#### Option 1: Redis CLI
+
+Connect to Redis:
+```bash
+redis-cli
+```
+
+Useful commands:
+```bash
+# List all keys
+KEYS *
+
+# View a specific room
+HGETALL room:<room-id>
+
+# View a specific player
+HGETALL player:<player-id>
+
+# View leaderboard (sorted by score)
+ZREVRANGE room:<room-id>:scores 0 -1 WITHSCORES
+
+# View questions for a room
+LRANGE room:<room-id>:questions 0 -1
+
+# Count total keys
+DBSIZE
+
+# Get key type
+TYPE room:<room-id>
+```
+
+#### Option 2: Redis GUI Tools
+
+Recommended GUI tools for better visualization:
+
+**RedisInsight** (Official Redis GUI - Recommended):
+```bash
+brew install --cask redisinsight
+```
+Download: https://redis.io/docs/latest/integrate/redisinsight/
+
+**Another Redis Desktop Manager**:
+```bash
+brew install --cask another-redis-desktop-manager
+```
+
+**Tiny RDM** (Lightweight):
+```bash
+brew install --cask tiny-rdm
+```
+
+After installing, connect using:
+- **Host**: `localhost`
+- **Port**: `6379`
+- **Database**: `0` (or your configured `REDIS_DB` value)
+
+#### Using RedisInsight
+
+**Step 1: Install RedisInsight**
+```bash
+brew install --cask redisinsight
+```
+
+**Step 2: Launch RedisInsight**
+Open RedisInsight from Applications or run:
+```bash
+open -a RedisInsight
+```
+
+**Step 3: Add Redis Database Connection**
+1. Click **"Add Redis Database"** or **"+"** button
+2. Enter connection details:
+   - **Host**: `localhost` (or your Redis host)
+   - **Port**: `6379` (or your configured port)
+   - **Database Alias**: `Ultimate Trivia` (optional, for identification)
+   - **Username**: Leave empty (for local Redis)
+   - **Password**: Leave empty (for local Redis without password)
+   - **Database Index**: `0` (or your `REDIS_DB` value from `.env`)
+3. Click **"Add Redis Database"**
+
+**Step 4: Browse Your Data**
+
+Once connected, you can:
+
+1. **View All Keys**:
+   - Click on your database connection
+   - Browse keys in the left sidebar
+   - Keys are organized by type and pattern
+
+2. **Explore Room Data**:
+   - Look for keys starting with `room:`
+   - Click on a room key (e.g., `room:abc-123-def`)
+   - View all fields in the hash (name, host_name, status, topics, etc.)
+
+3. **View Players**:
+   - Look for keys starting with `player:`
+   - Click on a player key to see their data (name, score, token, etc.)
+
+4. **Check Leaderboard**:
+   - Look for keys like `room:{room-id}:scores`
+   - These are sorted sets (ZSET)
+   - View members and scores, sorted automatically
+
+5. **See Questions**:
+   - Look for keys like `room:{room-id}:questions`
+   - These are lists - click to expand and see all questions
+   - Questions are stored as JSON strings
+
+**Step 5: Using RedisInsight Features**
+
+- **Search/Filter**: Use the search bar to filter keys by pattern (e.g., `room:*`)
+- **JSON Viewer**: For JSON data, RedisInsight automatically formats and highlights JSON
+- **Edit Values**: Right-click on keys/fields to edit values directly
+- **Delete Keys**: Right-click to delete keys (be careful!)
+- **Refresh**: Click the refresh button to update the view
+- **CLI Tab**: Use the built-in CLI tab to run Redis commands directly
+- **Browser Tab**: Visual key browser with tree view
+- **Profiler**: Monitor Redis commands in real-time
+
+**Step 6: Viewing Sorted Sets (Leaderboards)**
+
+To see leaderboard data:
+1. Find a key like `room:{room-id}:scores`
+2. Click on it - RedisInsight will show it as a ZSET
+3. You'll see player IDs and scores, already sorted by score (descending)
+4. The interface shows both member (player_id) and score values
+
+**Tips:**
+- Use the **filter/search** to quickly find specific rooms or players
+- The **Browser** tab provides a tree view of all your keys
+- The **CLI** tab lets you run Redis commands directly
+- Use **Refresh** after creating new data in your app
+
+### Redis Management Commands
+
+```bash
+# Start Redis server (macOS with Homebrew)
+brew services start redis
+
+# Stop Redis server
+brew services stop redis
+
+# Check if Redis is running
+redis-cli ping
+# Should return: PONG
+
+# Flush all data (⚠️ WARNING: Deletes all data)
+redis-cli FLUSHALL
+
+# Flush current database only
+redis-cli FLUSHDB
+
+# Monitor Redis commands in real-time
+redis-cli MONITOR
+```
+
+### Troubleshooting Redis
+
+**Connection Issues:**
+```bash
+# Test Redis connection
+redis-cli ping
+
+# Check Redis is running
+brew services list  # macOS
+# or
+ps aux | grep redis
+```
+
+**Common Issues:**
+- **Connection refused**: Make sure Redis server is running (`brew services start redis` on macOS)
+- **Wrong port**: Check your `.env` file matches your Redis configuration
+- **Password required**: If using Redis Cloud, ensure `REDIS_URL` includes the password
+
 ## Learn More
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com)
 - [Redis Documentation](https://redis.io/docs)
+- [Redis CLI Commands](https://redis.io/docs/latest/commands/)
