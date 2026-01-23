@@ -62,14 +62,18 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
         }
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('WebSocket disconnected', { 
+          code: event.code, 
+          reason: event.reason || 'No reason provided',
+          wasClean: event.wasClean 
+        });
         setIsConnected(false);
         wsRef.current = null;
         onClose?.();
 
-        // Attempt to reconnect
-        if (reconnect && shouldReconnect.current) {
+        // Attempt to reconnect only for abnormal closures
+        if (reconnect && shouldReconnect.current && !event.wasClean) {
           reconnectTimeoutRef.current = setTimeout(() => {
             console.log('Attempting to reconnect...');
             connect();
@@ -78,7 +82,11 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        // WebSocket errors don't provide detailed information in browsers
+        // Only log if we're not connected (actual connection error)
+        if (!isConnected) {
+          console.warn('WebSocket connection error - will retry if reconnect is enabled');
+        }
         onError?.(error);
       };
     } catch (error) {

@@ -21,6 +21,8 @@ import {
 } from './styled/GameComponents';
 import { api, tokenStorage, RoomResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
+import { useBackgroundMusic } from '../lib/useBackgroundMusic';
+import MusicControl from './MusicControl';
 
 interface StartGameProps {
   roomId: string;
@@ -94,6 +96,13 @@ export default function StartGame({ roomId }: StartGameProps) {
     onMessage: handleWebSocketMessage,
   });
 
+  // Background music
+  const { isMuted, toggleMute, isLoaded } = useBackgroundMusic('/background-music.mp3', {
+    autoPlay: true,
+    loop: true,
+    volume: 0.3,
+  });
+
   const handleCopyUrl = async () => {
     try {
       await navigator.clipboard.writeText(roomUrl);
@@ -131,26 +140,32 @@ export default function StartGame({ roomId }: StartGameProps) {
 
   if (isLoading) {
     return (
-      <PageContainer>
-        <FormCard>
-          <GameContainer>
-            <Title>Loading room...</Title>
-          </GameContainer>
-        </FormCard>
-      </PageContainer>
+      <>
+        <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
+        <PageContainer>
+          <FormCard>
+            <GameContainer>
+              <Title>Loading room...</Title>
+            </GameContainer>
+          </FormCard>
+        </PageContainer>
+      </>
     );
   }
 
   if (error && !room) {
     return (
-      <PageContainer>
-        <FormCard>
-          <GameContainer>
-            <Title>Error</Title>
-            <div style={{ color: '#dc2626', marginTop: '1rem' }}>{error}</div>
-          </GameContainer>
-        </FormCard>
-      </PageContainer>
+      <>
+        <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
+        <PageContainer>
+          <FormCard>
+            <GameContainer>
+              <Title>Error</Title>
+              <div style={{ color: '#dc2626', marginTop: '1rem' }}>{error}</div>
+            </GameContainer>
+          </FormCard>
+        </PageContainer>
+      </>
     );
   }
 
@@ -159,10 +174,12 @@ export default function StartGame({ roomId }: StartGameProps) {
   }
 
   return (
-    <PageContainer>
-      <FormCard>
-        <GameContainer>
-          <Title>Ultimate Trivia!</Title>
+    <>
+      <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
+      <PageContainer>
+        <FormCard>
+          <GameContainer>
+            <Title>Ultimate Trivia!</Title>
 
           {/* QR Code */}
           <QRCodeContainer>
@@ -230,6 +247,7 @@ export default function StartGame({ roomId }: StartGameProps) {
         </GameContainer>
       </FormCard>
     </PageContainer>
+    </>
   );
 }
 
