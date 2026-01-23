@@ -8,6 +8,7 @@ This guide will walk you through deploying your Ultimate Trivia application to R
 2. [Railway CLI](https://docs.railway.app/guides/cli) (optional, but recommended)
 3. Your code pushed to a Git repository (GitHub, GitLab, or Bitbucket)
 4. A Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
+5. Node.js 20.9.0+ (Railway will automatically use the version specified in `.nvmrc`)
 
 ## Overview
 

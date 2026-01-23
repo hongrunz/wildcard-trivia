@@ -7,6 +7,7 @@ Quick reference for deploying Ultimate Trivia to Railway.
 1. Railway account (free): https://railway.app
 2. Your code in a Git repository (GitHub/GitLab)
 3. Gemini API key: https://aistudio.google.com/app/apikey
+4. Node.js 20.9.0+ (auto-detected from `.nvmrc` file)
 
 ## 📋 Architecture
 

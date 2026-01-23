@@ -45,7 +45,7 @@ ultimate-trivia/
 
 ## Prerequisites
 
-- **Node.js** 18+ and npm/yarn/pnpm
+- **Node.js** 20.9.0+ and npm/yarn/pnpm
 - **Python** 3.14+
 - **Redis** (for database - can use local Redis or cloud service like Redis Cloud, Upstash)
 
