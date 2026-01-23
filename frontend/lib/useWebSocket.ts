@@ -14,6 +14,7 @@ interface UseWebSocketOptions {
   onError?: (error: Event) => void;
   reconnect?: boolean;
   reconnectInterval?: number;
+  maxReconnectAttempts?: number;
 }
 
 export function useWebSocket(roomId: string | null, options: UseWebSocketOptions = {}) {
@@ -24,10 +25,12 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
     onError,
     reconnect = true,
     reconnectInterval = 3000,
+    maxReconnectAttempts = 5,
   } = options;
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
   const [isConnected, setIsConnected] = useState(false);
   const shouldReconnect = useRef(true);
 
@@ -54,6 +57,7 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
       ws.onopen = () => {
         console.log('WebSocket connected');
         setIsConnected(true);
+        reconnectAttemptsRef.current = 0; // Reset on successful connection
         onOpen?.();
       };
 
@@ -76,12 +80,18 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
         wsRef.current = null;
         onClose?.();
 
-        // Attempt to reconnect only for abnormal closures
-        if (reconnect && shouldReconnect.current && !event.wasClean) {
+        // Attempt to reconnect only for abnormal closures with exponential backoff
+        if (reconnect && shouldReconnect.current && !event.wasClean && reconnectAttemptsRef.current < maxReconnectAttempts) {
+          reconnectAttemptsRef.current += 1;
+          // Exponential backoff: 3s, 6s, 12s, 24s, 48s
+          const backoffDelay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1);
+          console.log(`Attempting to reconnect (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}) in ${backoffDelay}ms...`);
+          
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('Attempting to reconnect...');
             connect();
-          }, reconnectInterval);
+          }, backoffDelay);
+        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+          console.warn('Max reconnection attempts reached. WebSocket will not reconnect.');
         }
       };
 
@@ -102,6 +112,7 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
   useEffect(() => {
     if (roomId) {
       shouldReconnect.current = true;
+      reconnectAttemptsRef.current = 0; // Reset attempts on room change
       connect();
     }
 
