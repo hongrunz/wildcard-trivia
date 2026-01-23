@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from uuid import UUID
+import os
 
 from apis.rooms import router as rooms_router
 from apis.websocket import manager
@@ -17,10 +18,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Configure CORS
+# Configure CORS - allow both local and production origins
+allowed_origins = [
+    "http://localhost:3000",  # Next.js dev server
+    os.getenv("FRONTEND_URL", ""),  # Production frontend URL from Railway
+]
+# Filter out empty strings
+allowed_origins = [origin for origin in allowed_origins if origin]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
