@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from storage.store import RoomStore, PlayerStore, QuestionStore
 from apis.llm.prompts import generate_questions_with_llm
+from apis.websocket import manager
 
 router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 
@@ -179,6 +180,16 @@ async def join_room(room_id: str, request: JoinRoomRequest):
         
         player = PlayerStore.create_player(room_uuid, request.playerName)
         
+        # Broadcast player joined event
+        await manager.broadcast_to_room(room_id, {
+            "type": "player_joined",
+            "player": {
+                "playerId": str(player.player_id),
+                "playerName": player.player_name,
+                "joinedAt": player.joined_at.isoformat()
+            }
+        })
+        
         return JoinRoomResponse(
             playerId=str(player.player_id),
             playerToken=player.player_token
@@ -237,7 +248,8 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
         QuestionStore.create_questions(questions_to_create)
         
         # Update room status
-        RoomStore.update_room_status(room_uuid, "started", datetime.now())
+        started_at = datetime.now()
+        RoomStore.update_room_status(room_uuid, "started", started_at)
         
         # Find the host's player record to get their player token
         host_player = None
@@ -245,6 +257,13 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
             if player.player_name == room.host_name:
                 host_player = player
                 break
+        
+        # Broadcast game started event with timestamp for timer sync
+        await manager.broadcast_to_room(room_id, {
+            "type": "game_started",
+            "startedAt": started_at.isoformat(),
+            "questionsCount": len(sample_questions)
+        })
         
         return StartGameResponse(
             success=True,
@@ -320,6 +339,14 @@ async def submit_answer(
             current_score = updated_player.score
         else:
             current_score = player.score
+        
+        # Broadcast answer submitted event
+        await manager.broadcast_to_room(room_id, {
+            "type": "answer_submitted",
+            "playerId": str(player.player_id),
+            "questionId": request.questionId,
+            "score": current_score
+        })
         
         return SubmitAnswerResponse(
             success=True,

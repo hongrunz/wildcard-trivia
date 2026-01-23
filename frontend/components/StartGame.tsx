@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -20,6 +20,7 @@ import {
   BottomSection,
 } from './styled/GameComponents';
 import { api, tokenStorage, RoomResponse } from '../lib/api';
+import { useWebSocket } from '../lib/useWebSocket';
 
 interface StartGameProps {
   roomId: string;
@@ -41,28 +42,57 @@ export default function StartGame({ roomId }: StartGameProps) {
   }, [roomId]);
 
   // Fetch room data
-  useEffect(() => {
-    const fetchRoom = async () => {
-      try {
-        const roomData = await api.getRoom(roomId);
-        setRoom(roomData);
-        setError('');
-      } catch (err) {
-        console.error('Error fetching room:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load room');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (roomId) {
-      fetchRoom();
-      
-      // Poll for room updates every 3 seconds
-      const interval = setInterval(fetchRoom, 3000);
-      return () => clearInterval(interval);
+  const fetchRoom = useCallback(async () => {
+    try {
+      const roomData = await api.getRoom(roomId);
+      setRoom(roomData);
+      setError('');
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error fetching room:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load room');
+      setIsLoading(false);
     }
   }, [roomId]);
+
+  // Initial fetch
+  useEffect(() => {
+    if (roomId) {
+      fetchRoom();
+    }
+  }, [roomId, fetchRoom]);
+
+  // WebSocket connection for real-time updates
+  const handleWebSocketMessage = useCallback((message: any) => {
+    console.log('WebSocket message received:', message);
+    
+    switch (message.type) {
+      case 'player_joined':
+        // Add new player to the list
+        setRoom((prevRoom) => {
+          if (!prevRoom) return null;
+          const playerExists = prevRoom.players.some(
+            (p) => p.playerId === message.player.playerId
+          );
+          if (playerExists) return prevRoom;
+          
+          return {
+            ...prevRoom,
+            players: [...prevRoom.players, message.player],
+          };
+        });
+        break;
+      
+      case 'game_started':
+        // Game has started, navigate to game page
+        router.push(`/game/${roomId}`);
+        break;
+    }
+  }, [roomId, router]);
+
+  useWebSocket(roomId, {
+    onMessage: handleWebSocketMessage,
+  });
 
   const handleCopyUrl = async () => {
     try {

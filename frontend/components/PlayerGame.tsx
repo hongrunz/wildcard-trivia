@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import QuestionScreen from './QuestionScreen';
 import SubmittedScreen from './SubmittedScreen';
 import GameFinished from './GameFinished';
 import { api, tokenStorage, RoomResponse, LeaderboardResponse } from '../lib/api';
+import { useWebSocket } from '../lib/useWebSocket';
 
 interface PlayerGameProps {
   roomId: string;
@@ -28,29 +29,11 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [gameStartedAt, setGameStartedAt] = useState<Date | null>(null);
 
   const playerToken = tokenStorage.getPlayerToken(roomId);
 
-  useEffect(() => {
-    fetchRoom();
-    // Poll for room updates
-    const interval = setInterval(fetchRoom, 2000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId]);
-
-  // Poll for leaderboard updates when game is active
-  useEffect(() => {
-    if (room && (room.status === 'started' || room.status === 'finished')) {
-      fetchLeaderboard();
-      // Poll leaderboard every 2 seconds
-      const interval = setInterval(fetchLeaderboard, 2000);
-      return () => clearInterval(interval);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room?.status, roomId]);
-
-  const fetchRoom = async () => {
+  const fetchRoom = useCallback(async () => {
     try {
       const roomData = await api.getRoom(roomId);
       setRoom(roomData);
@@ -58,6 +41,11 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       // Check if game has started
       if (roomData.status === 'started' && roomData.questions) {
         setIsLoading(false);
+        
+        // Set game started timestamp if available
+        if (roomData.startedAt) {
+          setGameStartedAt(new Date(roomData.startedAt));
+        }
         
         // Fetch leaderboard from API
         fetchLeaderboard();
@@ -72,9 +60,9 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       setError(err instanceof Error ? err.message : 'Failed to load game');
       setIsLoading(false);
     }
-  };
+  }, [roomId]);
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       const leaderboardData: LeaderboardResponse = await api.getLeaderboard(roomId);
       
@@ -120,7 +108,54 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       // Fallback to empty leaderboard on error
       setLeaderboard([]);
     }
-  };
+  }, [roomId, room]);
+
+  // Initial room fetch
+  useEffect(() => {
+    fetchRoom();
+  }, [fetchRoom]);
+
+  // WebSocket message handler
+  const handleWebSocketMessage = useCallback((message: any) => {
+    console.log('WebSocket message received:', message);
+    
+    switch (message.type) {
+      case 'game_started':
+        // Game started - set timestamp for timer sync
+        if (message.startedAt) {
+          setGameStartedAt(new Date(message.startedAt));
+        }
+        // Refresh room data to get questions
+        fetchRoom();
+        break;
+      
+      case 'answer_submitted':
+        // Another player submitted an answer - refresh leaderboard
+        fetchLeaderboard();
+        break;
+      
+      case 'player_joined':
+        // Update player list
+        setRoom((prevRoom) => {
+          if (!prevRoom) return null;
+          const playerExists = prevRoom.players.some(
+            (p) => p.playerId === message.player.playerId
+          );
+          if (playerExists) return prevRoom;
+          
+          return {
+            ...prevRoom,
+            players: [...prevRoom.players, message.player],
+          };
+        });
+        break;
+    }
+  }, [fetchRoom, fetchLeaderboard]);
+
+  // WebSocket connection
+  useWebSocket(roomId, {
+    onMessage: handleWebSocketMessage,
+  });
 
   const handleSubmitAnswer = async (answer: string) => {
     if (!room || !room.questions || !playerToken) return;
@@ -142,20 +177,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       // Refresh leaderboard after submitting answer
       fetchLeaderboard();
       
-      // Auto-advance to next question after 7 seconds (or wait for all players)
-      setTimeout(() => {
-        if (!room || !room.questions) return;
-        if (currentQuestionIndex < room.questions.length - 1) {
-          setCurrentQuestionIndex((prev) => prev + 1);
-          setGameState('question');
-          // Refresh leaderboard when moving to next question
-          fetchLeaderboard();
-        } else {
-          // Game finished - fetch final leaderboard
-          fetchLeaderboard();
-          setGameState('finished');
-        }
-      }, 7000);
+      // Don't auto-advance - let timer expire naturally
     } catch (err) {
       console.error('Error submitting answer:', err);
       // Fallback to local check if API fails
@@ -165,23 +187,51 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       }
       setIsCorrect(correct);
       setGameState('submitted');
-      
-      setTimeout(() => {
-        if (!room || !room.questions) return;
-        if (currentQuestionIndex < room.questions.length - 1) {
-          setCurrentQuestionIndex((prev) => prev + 1);
-          setGameState('question');
-        } else {
-          fetchLeaderboard();
-          setGameState('finished');
-        }
-      }, 7000);
     }
   };
 
-  // Start timer when question is shown
+  // Synchronized timer based on game start timestamp
   useEffect(() => {
-    if (gameState === 'question' && room?.timePerQuestion) {
+    if ((gameState === 'question' || gameState === 'submitted') && room?.timePerQuestion && gameStartedAt && room.questions) {
+      const updateTimer = () => {
+        // Calculate elapsed time since game started
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now.getTime() - gameStartedAt.getTime()) / 1000);
+        
+        // Each question takes timePerQuestion seconds
+        const totalTimePerRound = room.timePerQuestion;
+        
+        // Calculate which round we're in based on elapsed time
+        const calculatedQuestionIndex = Math.floor(elapsedSeconds / totalTimePerRound);
+        const timeInCurrentRound = elapsedSeconds % totalTimePerRound;
+        
+        // Sync question index if we're out of sync
+        if (calculatedQuestionIndex !== currentQuestionIndex && calculatedQuestionIndex < room.questions.length) {
+          setCurrentQuestionIndex(calculatedQuestionIndex);
+          setGameState('question');
+        }
+        
+        // Check if game should be finished
+        if (calculatedQuestionIndex >= room.questions.length && gameState !== 'finished') {
+          setGameState('finished');
+          fetchLeaderboard();
+          return;
+        }
+        
+        // Calculate remaining time for current question
+        const remainingTime = room.timePerQuestion - timeInCurrentRound;
+        setTimer(Math.max(0, remainingTime));
+      };
+
+      // Update immediately
+      updateTimer();
+      
+      // Update every 100ms for smooth countdown
+      const interval = setInterval(updateTimer, 100);
+
+      return () => clearInterval(interval);
+    } else if ((gameState === 'question' || gameState === 'submitted') && room?.timePerQuestion && !gameStartedAt) {
+      // Fallback to local timer if no sync timestamp
       setTimer(room.timePerQuestion);
       const interval = setInterval(() => {
         setTimer((prev) => {
@@ -195,29 +245,16 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
 
       return () => clearInterval(interval);
     }
-  }, [gameState, currentQuestionIndex, room?.timePerQuestion]);
+  }, [gameState, currentQuestionIndex, room?.timePerQuestion, room?.questions, gameStartedAt, fetchLeaderboard]);
 
-  // Auto-submit when timer reaches 0
+  // Auto-submit when timer reaches 0 if user hasn't submitted yet
   useEffect(() => {
-    if (timer === 0 && gameState === 'question' && room && room.questions && currentQuestionIndex < room.questions.length) {
-      const correct = false; // Timeout means wrong
-      setIsCorrect(correct);
+    if (timer === 0 && gameState === 'question') {
+      // Auto-submit as wrong when time runs out
+      setIsCorrect(false);
       setGameState('submitted');
-      
-      setTimeout(() => {
-        if (!room || !room.questions) return;
-        if (currentQuestionIndex < room.questions.length - 1) {
-          setCurrentQuestionIndex((prev) => prev + 1);
-          setGameState('question');
-        } else {
-          // Game finished - fetch final leaderboard
-          fetchLeaderboard();
-          setGameState('finished');
-        }
-      }, 7000);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timer]);
+  }, [timer, gameState]);
 
   if (isLoading) {
     return (
@@ -286,6 +323,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
         correctAnswer={currentQuestion?.options?.[currentQuestion.correctAnswer] || ''}
         explanation={currentQuestion?.explanation || ''}
         leaderboard={leaderboard}
+        timer={timer}
       />
     );
   }
