@@ -3,12 +3,17 @@ Gemini API integration for generating trivia questions (google-genai).
 """
 
 import json
+import logging
 import os
 from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -54,17 +59,28 @@ Return ONLY a valid JSON array of objects. Each object MUST have:
 
     # Non-streaming: easier to parse reliably
     try:
+        logger.info(f"Calling Gemini API with model: {MODEL_NAME}")
+        logger.info(f"Topics: {topics_str}, Count: {count}")
+        
         resp = client.models.generate_content(
             model=MODEL_NAME,
             contents=contents,
             config=config,
         )
+        
+        logger.info("Gemini API call successful")
     except Exception as e:
+        logger.error(f"Failed to call Gemini API: {e}")
         raise RuntimeError(f"Error calling Gemini API: {e}") from e
 
     response_text = getattr(resp, "text", None) or ""
     response_text = response_text.strip()
+    
+    logger.info(f"Raw response length: {len(response_text)} characters")
+    logger.info(f"Raw response (first 500 chars):\n{response_text[:500]}")
+    
     if not response_text:
+        logger.error("Empty response from Gemini API")
         raise RuntimeError("Empty response from Gemini API")
 
     # Strip accidental code fences
@@ -78,23 +94,29 @@ Return ONLY a valid JSON array of objects. Each object MUST have:
 
     try:
         questions = json.loads(response_text)
+        logger.info(f"Successfully parsed JSON, got {len(questions) if isinstance(questions, list) else 0} items")
     except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON: {e}")
+        logger.error(f"Problematic response:\n{response_text[:500]}")
         raise ValueError(
             f"Failed to parse Gemini API response as JSON: {e}. Response: {response_text[:200]}"
         ) from e
 
     formatted: List[Dict[str, Any]] = []
     if not isinstance(questions, list):
+        logger.error(f"Response is not a list, got type: {type(questions)}")
         raise ValueError("Gemini response was not a JSON array.")
 
-    for q in questions:
+    for i, q in enumerate(questions):
         if not isinstance(q, dict):
+            logger.warning(f"Question {i} is not a dict, skipping")
             continue
         options = q.get("options", [])[:4]
         correct = q.get("correct_answer", 0)
         try:
             correct_idx = int(correct)
         except Exception:
+            logger.warning(f"Invalid correct_answer for question {i}: {correct}, defaulting to 0")
             correct_idx = 0
         formatted.append(
             {
@@ -105,5 +127,12 @@ Return ONLY a valid JSON array of objects. Each object MUST have:
             }
         )
 
-    return formatted[:count]
+    result = formatted[:count]
+    logger.info(f"Successfully formatted {len(result)} questions")
+    if result:
+        logger.info(f"Sample question: {result[0].get('question', 'N/A')[:100]}...")
+    else:
+        logger.warning("No questions generated")
+    
+    return result
 
