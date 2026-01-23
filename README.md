@@ -377,9 +377,30 @@ ps aux | grep redis
 - **Wrong port**: Check your `.env` file matches your Redis configuration
 - **Password required**: If using Redis Cloud, ensure `REDIS_URL` includes the password
 
+## Deployment
+
+### Deploy to Railway
+
+For production deployment on Railway, see the comprehensive deployment guide:
+
+📚 **[Railway Deployment Guide](./RAILWAY_DEPLOYMENT.md)**
+
+The guide includes:
+- Step-by-step deployment instructions
+- Environment variable configuration
+- Troubleshooting tips
+- Cost estimates
+- Custom domain setup
+
+Quick setup files:
+- Backend: `backend/railway.json`, `backend/Procfile`
+- Frontend: `railway.json`
+- Environment examples: `ENV_RAILWAY_EXAMPLE.md`, `backend/ENV_RAILWAY_EXAMPLE.md`
+
 ## Learn More
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [FastAPI Documentation](https://fastapi.tiangolo.com)
 - [Redis Documentation](https://redis.io/docs)
 - [Redis CLI Commands](https://redis.io/docs/latest/commands/)
+- [Railway Documentation](https://docs.railway.app/)
