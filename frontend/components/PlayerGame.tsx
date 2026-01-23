@@ -280,11 +280,17 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       return () => clearInterval(interval);
     } else if ((gameState === 'question' || gameState === 'submitted') && room?.timePerQuestion && !gameStartedAt) {
       // Fallback to local timer if no sync timestamp
-      setTimer(room.timePerQuestion);
+      console.log('Using local timer fallback');
+      
+      // Initialize timer for current question
+      if (timer === undefined || gameState === 'question') {
+        setTimer(room.timePerQuestion);
+      }
+      
       const interval = setInterval(() => {
         setTimer((prev) => {
-          if (prev === undefined || prev <= 1) {
-            clearInterval(interval);
+          if (prev === undefined) return room.timePerQuestion;
+          if (prev <= 1) {
             return 0;
           }
           return prev - 1;
@@ -293,7 +299,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
 
       return () => clearInterval(interval);
     }
-  }, [gameState, currentQuestionIndex, room?.timePerQuestion, room?.questions, gameStartedAt, fetchLeaderboard]);
+  }, [gameState, currentQuestionIndex, room?.timePerQuestion, room?.questions, gameStartedAt, fetchLeaderboard, timer]);
 
   // Auto-submit when timer reaches 0 if user hasn't submitted yet
   useEffect(() => {
@@ -303,6 +309,26 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       setGameState('submitted');
     }
   }, [timer, gameState]);
+
+  // Advance to next question after showing submitted screen (local timer mode)
+  useEffect(() => {
+    if (gameState === 'submitted' && !gameStartedAt && room?.questions) {
+      // Wait 2 seconds before moving to next question
+      const timeout = setTimeout(() => {
+        if (currentQuestionIndex < room.questions!.length - 1) {
+          setCurrentQuestionIndex(prev => prev + 1);
+          setGameState('question');
+          setTimer(room.timePerQuestion);
+        } else {
+          // Game finished
+          setGameState('finished');
+          fetchLeaderboard();
+        }
+      }, 2000);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [gameState, gameStartedAt, currentQuestionIndex, room?.questions, room?.timePerQuestion, fetchLeaderboard]);
 
   if (isLoading) {
     return (
