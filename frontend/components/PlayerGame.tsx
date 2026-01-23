@@ -124,7 +124,15 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   }, [fetchRoom]);
 
   // WebSocket message handler
-  const handleWebSocketMessage = useCallback((message: { type: string; startedAt?: string; [key: string]: unknown }) => {
+  const handleWebSocketMessage = useCallback((message: {
+    type: string;
+    startedAt?: string;
+    player?: {
+      playerId: string;
+      playerName: string;
+      joinedAt: string;
+    };
+  }) => {
     console.log('WebSocket message received:', message);
     
     switch (message.type) {
@@ -150,18 +158,25 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       
       case 'player_joined':
         // Update player list
-        setRoom((prevRoom) => {
-          if (!prevRoom) return null;
-          const playerExists = prevRoom.players.some(
-            (p) => p.playerId === message.player.playerId
-          );
-          if (playerExists) return prevRoom;
-          
-          return {
-            ...prevRoom,
-            players: [...prevRoom.players, message.player],
-          };
-        });
+        if (message.player) {
+          setRoom((prevRoom) => {
+            if (!prevRoom) return null;
+            const playerExists = prevRoom.players.some(
+              (p) => p.playerId === message.player!.playerId
+            );
+            if (playerExists) return prevRoom;
+            
+            return {
+              ...prevRoom,
+              players: [...prevRoom.players, {
+                playerId: message.player!.playerId,
+                playerName: message.player!.playerName,
+                score: 0,
+                joinedAt: message.player!.joinedAt,
+              }],
+            };
+          });
+        }
         break;
     }
   }, [fetchRoom, fetchLeaderboard]);
