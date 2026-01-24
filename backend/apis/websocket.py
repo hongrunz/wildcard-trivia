@@ -21,7 +21,6 @@ class ConnectionManager:
             if room_id not in self.active_connections:
                 self.active_connections[room_id] = set()
             self.active_connections[room_id].add(websocket)
-        print(f"Client connected to room {room_id}. Total connections: {len(self.active_connections[room_id])}")
     
     async def disconnect(self, websocket: WebSocket, room_id: str):
         """Disconnect a client from a room"""
@@ -30,7 +29,6 @@ class ConnectionManager:
                 self.active_connections[room_id].discard(websocket)
                 if not self.active_connections[room_id]:
                     del self.active_connections[room_id]
-        print(f"Client disconnected from room {room_id}")
     
     async def broadcast_to_room(self, room_id: str, message: dict):
         """Broadcast a message to all clients in a room"""
@@ -43,8 +41,7 @@ class ConnectionManager:
         for connection in self.active_connections[room_id].copy():
             try:
                 await connection.send_text(message_text)
-            except Exception as e:
-                print(f"Error sending message to client: {e}")
+            except Exception:
                 disconnected.add(connection)
         
         # Clean up disconnected clients

@@ -51,7 +51,6 @@ export default function StartGame({ roomId }: StartGameProps) {
       setError('');
       setIsLoading(false);
     } catch (err) {
-      console.error('Error fetching room:', err);
       setError(err instanceof Error ? err.message : 'Failed to load room');
       setIsLoading(false);
     }
@@ -66,8 +65,6 @@ export default function StartGame({ roomId }: StartGameProps) {
 
   // WebSocket connection for real-time updates
   const handleWebSocketMessage = useCallback((message: any) => {
-    console.log('WebSocket message received:', message);
-    
     switch (message.type) {
       case 'player_joined':
         // Add new player to the list
@@ -108,7 +105,7 @@ export default function StartGame({ roomId }: StartGameProps) {
       await navigator.clipboard.writeText(roomUrl);
       alert('URL copied to clipboard!');
     } catch (err) {
-      console.error('Failed to copy URL:', err);
+      alert('Failed to copy URL');
     }
   };
 
@@ -132,7 +129,6 @@ export default function StartGame({ roomId }: StartGameProps) {
       // Navigate to the game page
       router.push(`/game/${roomId}`);
     } catch (err) {
-      console.error('Error starting game:', err);
       setError(err instanceof Error ? err.message : 'Failed to start game. Please try again.');
       setIsStarting(false);
     }

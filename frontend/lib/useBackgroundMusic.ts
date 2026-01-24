@@ -45,8 +45,8 @@ export function useBackgroundMusic(
     const handleCanPlay = () => {
       setIsLoaded(true);
       if (autoPlay && !isMuted) {
-        audio.play().catch(err => {
-          console.log('Auto-play prevented by browser:', err);
+        audio.play().catch(() => {
+          // Auto-play prevented by browser
         });
       }
     };
@@ -77,8 +77,8 @@ export function useBackgroundMusic(
     if (isMuted) {
       audioRef.current.pause();
     } else if (isLoaded) {
-      audioRef.current.play().catch(err => {
-        console.log('Play prevented:', err);
+      audioRef.current.play().catch(() => {
+        // Play prevented
       });
     }
 
@@ -94,8 +94,8 @@ export function useBackgroundMusic(
 
   const play = useCallback(() => {
     if (audioRef.current && !isMuted) {
-      audioRef.current.play().catch(err => {
-        console.error('Failed to play audio:', err);
+      audioRef.current.play().catch(() => {
+        // Failed to play audio
       });
     }
   }, [isMuted]);

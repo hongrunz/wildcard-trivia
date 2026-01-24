@@ -50,12 +50,10 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
       const host = apiUrl.replace(/^https?:\/\//, '');
       const wsUrl = `${protocol}//${host}/ws/${roomId}`;
       
-      console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
         setIsConnected(true);
         reconnectAttemptsRef.current = 0; // Reset on successful connection
         onOpen?.();
@@ -66,16 +64,11 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
           const message = JSON.parse(event.data);
           onMessage?.(message);
         } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
+          // Failed to parse WebSocket message
         }
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected', { 
-          code: event.code, 
-          reason: event.reason || 'No reason provided',
-          wasClean: event.wasClean 
-        });
         setIsConnected(false);
         wsRef.current = null;
         onClose?.();
@@ -85,26 +78,19 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
           reconnectAttemptsRef.current += 1;
           // Exponential backoff: 3s, 6s, 12s, 24s, 48s
           const backoffDelay = reconnectInterval * Math.pow(2, reconnectAttemptsRef.current - 1);
-          console.log(`Attempting to reconnect (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}) in ${backoffDelay}ms...`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, backoffDelay);
-        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-          console.warn('Max reconnection attempts reached. WebSocket will not reconnect.');
         }
       };
 
       ws.onerror = (error) => {
         // WebSocket errors don't provide detailed information in browsers
-        // Only log if we're not connected (actual connection error)
-        if (!isConnected) {
-          console.warn('WebSocket connection error - will retry if reconnect is enabled');
-        }
         onError?.(error);
       };
     } catch (error) {
-      console.error('Failed to create WebSocket connection:', error);
+      // Failed to create WebSocket connection
     }
   }, [roomId, onMessage, onOpen, onClose, onError, reconnect, reconnectInterval]);
 
@@ -131,8 +117,6 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
   const sendMessage = useCallback((message: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
-    } else {
-      console.warn('WebSocket is not connected');
     }
   }, []);
 

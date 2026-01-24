@@ -58,7 +58,6 @@ export default function CreateGame() {
       // Navigate to host start page
       router.push(`/host/${response.roomId}`);
     } catch (err) {
-      console.error('Error creating room:', err);
       setError(err instanceof Error ? err.message : 'Failed to create room. Please try again.');
       setIsLoading(false);
     }

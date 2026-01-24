@@ -46,7 +46,6 @@ export default function JoinGame() {
       // Navigate to game view
       router.push(`/game/${roomId}`);
     } catch (err) {
-      console.error('Error joining room:', err);
       setError(err instanceof Error ? err.message : 'Failed to join room. Please try again.');
       setIsLoading(false);
     }

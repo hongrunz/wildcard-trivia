@@ -42,22 +42,17 @@ app.include_router(rooms_router)
 async def websocket_endpoint(websocket: WebSocket, room_id: str):
     """WebSocket endpoint for real-time room updates"""
     try:
-        print(f"WebSocket connection attempt for room: {room_id}")
         await manager.connect(websocket, room_id)
-        print(f"WebSocket connected for room: {room_id}")
         
         # Keep connection alive and listen for messages
         while True:
             # Receive messages from client (if any)
             data = await websocket.receive_text()
-            print(f"WebSocket received data: {data[:100]}")  # Log first 100 chars
             # Echo back or handle client messages if needed
             # For now, we just keep the connection alive
     except WebSocketDisconnect as e:
-        print(f"WebSocket disconnected for room {room_id}: code={e.code}")
         await manager.disconnect(websocket, room_id)
     except Exception as e:
-        print(f"WebSocket error for room {room_id}: {type(e).__name__}: {e}")
         try:
             await manager.disconnect(websocket, room_id)
         except:

@@ -4,8 +4,6 @@ import { useRouter } from 'next/navigation';
 import {
   GameScreenContainer,
   GameCard,
-  GameHeader,
-  CircularBadge,
   GameTitle,
   LeaderboardSection,
   LeaderboardHeading,
@@ -27,8 +25,6 @@ interface GameFinishedProps {
 }
 
 export default function GameFinished({
-  totalQuestions,
-  finalScore,
   leaderboard,
 }: GameFinishedProps) {
   const router = useRouter();
@@ -40,11 +36,6 @@ export default function GameFinished({
   return (
     <GameScreenContainer>
       <GameCard>
-        <GameHeader>
-          {finalScore !== undefined && (
-            <CircularBadge>Score: {finalScore}</CircularBadge>
-          )}
-        </GameHeader>
         <GameTitle>Game Finished! 🎉</GameTitle>
         <LeaderboardSection>
           <LeaderboardHeading>Leader board:</LeaderboardHeading>
