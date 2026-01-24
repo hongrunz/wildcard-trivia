@@ -18,13 +18,12 @@ import { InfoBox } from './styled/InfoComponents';
 import { api, tokenStorage } from '../lib/api';
 import { getSessionMode, getDeviceType } from '../lib/deviceDetection';
 
-const DEFAULT_NUM_QUESTIONS = 10;
-const DEFAULT_TIME_LIMIT = 30;
+const DEFAULT_NUM_QUESTIONS = 5;
+const DEFAULT_TIME_LIMIT = 20;
 
 export default function CreateGame() {
   const router = useRouter();
   const [hostName, setHostName] = useState('');
-  const [topic, setTopic] = useState('');
   const [numQuestions, setNumQuestions] = useState(DEFAULT_NUM_QUESTIONS);
   const [timeLimit, setTimeLimit] = useState(DEFAULT_TIME_LIMIT);
   const [isLoading, setIsLoading] = useState(false);
@@ -48,21 +47,13 @@ export default function CreateGame() {
       return;
     }
 
-    if (!topic.trim()) {
-      setError('Please enter a topic');
-      return;
-    }
-
     setIsLoading(true);
     setError('');
 
     try {
-      // Split topics by comma and trim each
-      const topics = topic.split(',').map(t => t.trim()).filter(t => t.length > 0);
-
       const response = await api.createRoom({
         name: hostName.trim() || 'Host', // Default name for display mode
-        topics: topics.length > 0 ? topics : [topic.trim()],
+        topics: [], // Topics will be collected from players
         questionsPerRound: numQuestions,
         timePerQuestion: timeLimit,
         sessionMode: sessionMode, // Pass session mode to backend
@@ -113,23 +104,12 @@ export default function CreateGame() {
           )}
 
           <FieldContainer>
-            <Label htmlFor="topic">Topic(s):</Label>
-            <Input
-              id="topic"
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="Enter topic(s), separated by commas"
-            />
-          </FieldContainer>
-
-          <FieldContainer>
             <Label htmlFor="numQuestions">Number of questions to be asked:</Label>
             <Input
               id="numQuestions"
               type="number"
               value={numQuestions}
-              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 10)}
+              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 5)}
               min="1"
             />
           </FieldContainer>
@@ -140,8 +120,8 @@ export default function CreateGame() {
               id="timeLimit"
               type="number"
               value={timeLimit}
-              onChange={(e) => setTimeLimit(parseInt(e.target.value) || 60)}
-              placeholder="e.g., 30 seconds"
+              onChange={(e) => setTimeLimit(parseInt(e.target.value) || 20)}
+              placeholder="e.g., 20 seconds"
             />
           </FieldContainer>
 
@@ -152,7 +132,7 @@ export default function CreateGame() {
         <ButtonContainer>
           <ButtonPrimary
             onClick={handleCreateRoom}
-            disabled={(sessionMode === 'player' && !hostName.trim()) || !topic.trim() || isLoading}
+            disabled={(sessionMode === 'player' && !hostName.trim()) || isLoading}
           >
             {isLoading ? 'Creating...' : 'Create Room'}
           </ButtonPrimary>

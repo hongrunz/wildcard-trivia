@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
-from storage.store import RoomStore, PlayerStore, QuestionStore
+from storage.store import RoomStore, PlayerStore, QuestionStore, TopicStore
 from apis.llm.prompts import generate_questions_with_llm
 from apis.websocket import manager
 
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/rooms", tags=["rooms"])
 # Request/Response models
 class CreateRoomRequest(BaseModel):
     name: str
-    topics: list[str]
+    topics: Optional[list[str]] = []  # Topics are now optional, collected from players
     questionsPerRound: int
     timePerQuestion: int
     sessionMode: Optional[str] = 'player'  # 'player' or 'display'
@@ -31,6 +31,7 @@ class CreateRoomResponse(BaseModel):
 
 class JoinRoomRequest(BaseModel):
     playerName: str
+    topic: Optional[str] = None
 
 
 class JoinRoomResponse(BaseModel):
@@ -57,6 +58,7 @@ class RoomResponse(BaseModel):
     roomId: str
     name: str
     topics: list[str]
+    collectedTopics: list[str]  # Topics submitted by players
     questionsPerRound: int
     timePerQuestion: int
     hostName: str
@@ -91,7 +93,7 @@ async def create_room(request: CreateRoomRequest):
             name=request.name,
             host_name=request.name,  # Using name as host_name
             host_token=host_token,
-            topics=request.topics,
+            topics=request.topics or [],  # Default to empty list if not provided
             questions_per_round=request.questionsPerRound,
             time_per_question=request.timePerQuestion,
         )
@@ -148,10 +150,14 @@ async def get_room(room_id: str):
                 for q in questions
             ]
         
+        # Get collected topics
+        collected_topics = TopicStore.get_topics(room_uuid)
+        
         return RoomResponse(
             roomId=str(room.room_id),
             name=room.name,
             topics=room.topics,
+            collectedTopics=collected_topics,
             questionsPerRound=room.questions_per_round,
             timePerQuestion=room.time_per_question,
             hostName=room.host_name,
@@ -183,6 +189,10 @@ async def join_room(room_id: str, request: JoinRoomRequest):
             raise HTTPException(status_code=400, detail="Room is no longer accepting players")
         
         player = PlayerStore.create_player(room_uuid, request.playerName)
+        
+        # Add topic if provided
+        if request.topic and request.topic.strip():
+            TopicStore.add_topic(room_uuid, player.player_id, request.topic)
         
         # Broadcast player joined event
         await manager.broadcast_to_room(room_id, {
@@ -234,8 +244,17 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
         if not players:
             raise HTTPException(status_code=400, detail="Cannot start game without players. Please wait for players to join.")
         
+        # Get collected topics from players
+        collected_topics = TopicStore.get_topics(room_uuid)
+        
+        # Use collected topics if available, otherwise fall back to room topics
+        topics_to_use = collected_topics if collected_topics else room.topics
+        
+        if not topics_to_use:
+            raise HTTPException(status_code=400, detail="No topics submitted. Please wait for players to submit topics.")
+        
         # Generate questions
-        sample_questions = generate_questions_with_llm(room.topics, room.questions_per_round)
+        sample_questions = generate_questions_with_llm(topics_to_use, room.questions_per_round)
         
         # Create questions in database
         from storage.models import QuestionCreate

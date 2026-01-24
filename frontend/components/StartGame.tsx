@@ -18,6 +18,9 @@ import {
   Ellipsis,
   GameContainer,
   BottomSection,
+  TopicsSection,
+  TopicsContainer,
+  TopicBadge,
 } from './styled/GameComponents';
 import { api, tokenStorage, RoomResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
@@ -78,19 +81,8 @@ export default function StartGame({ roomId }: StartGameProps) {
   const handleWebSocketMessage = useCallback((message: any) => {
     switch (message.type) {
       case 'player_joined':
-        // Add new player to the list
-        setRoom((prevRoom) => {
-          if (!prevRoom) return null;
-          const playerExists = prevRoom.players.some(
-            (p) => p.playerId === message.player.playerId
-          );
-          if (playerExists) return prevRoom;
-          
-          return {
-            ...prevRoom,
-            players: [...prevRoom.players, message.player],
-          };
-        });
+        // Refresh room data to get updated players and topics
+        fetchRoom();
         break;
       
       case 'game_started':
@@ -102,7 +94,7 @@ export default function StartGame({ roomId }: StartGameProps) {
         }
         break;
     }
-  }, [roomId, router, sessionMode]);
+  }, [roomId, router, sessionMode, fetchRoom]);
 
   useWebSocket(roomId, {
     onMessage: handleWebSocketMessage,
@@ -222,6 +214,22 @@ export default function StartGame({ roomId }: StartGameProps) {
           <ButtonPrimary onClick={handleCopyUrl} style={{ marginBottom: '2rem' }}>
             copy URL
           </ButtonPrimary>
+
+          {/* Display collected topics */}
+          {room.collectedTopics && room.collectedTopics.length > 0 && (
+            <TopicsSection>
+              <MutedText style={{ marginBottom: '0.5rem' }}>
+                Topics submitted ({room.collectedTopics.length}):
+              </MutedText>
+              <TopicsContainer>
+                {room.collectedTopics.map((topic, index) => (
+                  <TopicBadge key={index}>
+                    {topic}
+                  </TopicBadge>
+                ))}
+              </TopicsContainer>
+            </TopicsSection>
+          )}
 
           {error && <ErrorText style={{ marginBottom: '1rem' }}>{error}</ErrorText>}
 

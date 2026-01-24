@@ -21,6 +21,7 @@ export default function JoinGame() {
   const searchParams = useSearchParams();
   const roomId = searchParams.get('roomId') || '';
   const [guestName, setGuestName] = useState('');
+  const [topic, setTopic] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,7 +40,7 @@ export default function JoinGame() {
     setError('');
 
     try {
-      const response = await api.joinRoom(roomId, guestName.trim());
+      const response = await api.joinRoom(roomId, guestName.trim(), topic.trim() || undefined);
 
       // Store player token
       tokenStorage.setPlayerToken(roomId, response.playerToken);
@@ -66,6 +67,22 @@ export default function JoinGame() {
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
               placeholder="Enter your name"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleJoin();
+                }
+              }}
+            />
+          </FieldContainer>
+
+          <FieldContainer>
+            <Label htmlFor="topic">Topic Suggestion (optional):</Label>
+            <Input
+              id="topic"
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="Suggest a topic for questions"
               onKeyPress={(e) => {
                 if (e.key === 'Enter') {
                   handleJoin();

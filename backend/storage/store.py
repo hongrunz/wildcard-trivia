@@ -52,6 +52,11 @@ def _player_token_key(player_token: str) -> str:
     return f"player_token:{player_token}"
 
 
+def _room_topics_key(room_id: UUID) -> str:
+    """Get Redis key for room topics set"""
+    return f"room:{room_id}:topics"
+
+
 class RoomStore:
     """Store for room operations"""
 
@@ -310,6 +315,41 @@ class PlayerStore:
                 players.append(player)
         
         return players
+
+
+class TopicStore:
+    """Store for topic operations"""
+
+    @staticmethod
+    def add_topic(room_id: UUID, player_id: UUID, topic: str) -> None:
+        """Add a topic submitted by a player"""
+        r = get_redis_client()
+        
+        # Check if room exists
+        if not r.exists(_room_key(room_id)):
+            raise ValueError("Room not found")
+        
+        # Store topic in Redis set (automatically handles duplicates)
+        topics_key = _room_topics_key(room_id)
+        r.sadd(topics_key, topic.strip())
+    
+    @staticmethod
+    def get_topics(room_id: UUID) -> List[str]:
+        """Get all topics submitted for a room"""
+        r = get_redis_client()
+        
+        topics_key = _room_topics_key(room_id)
+        topics = r.smembers(topics_key)
+        
+        return sorted([topic for topic in topics if topic])
+    
+    @staticmethod
+    def clear_topics(room_id: UUID) -> None:
+        """Clear all topics for a room"""
+        r = get_redis_client()
+        
+        topics_key = _room_topics_key(room_id)
+        r.delete(topics_key)
 
 
 class QuestionStore:

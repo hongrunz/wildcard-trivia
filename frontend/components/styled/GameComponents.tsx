@@ -48,6 +48,27 @@ export const BottomSection = styled.div`
   margin-top: 2rem;
 `;
 
+export const TopicsSection = styled.div`
+  margin-bottom: 2rem;
+  width: 100%;
+`;
+
+export const TopicsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+`;
+
+export const TopicBadge = styled.span`
+  padding: 0.5rem 1rem;
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  color: #3b82f6;
+`;
+
 // Game Screen Components
 export const GameScreenContainer = styled.div`
   min-height: 100vh;

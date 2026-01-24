@@ -11,7 +11,7 @@ from uuid import UUID
 class RoomBase(BaseModel):
     name: str
     host_name: str
-    topics: List[str]
+    topics: List[str] = []  # Topics are now optional, collected from players
     questions_per_round: int
     time_per_question: int
 
