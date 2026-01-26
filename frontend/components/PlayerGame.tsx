@@ -17,6 +17,7 @@ import {
 } from './styled/FormComponents';
 import { ErrorBox, ErrorIcon, ErrorHeading, ErrorMessage } from './styled/ErrorComponents';
 import { CenteredMessage } from './styled/StatusComponents';
+import { GameTitleImage } from './styled/GameComponents';
 import { colors } from './styled/theme';
 
 interface PlayerGameProps {
