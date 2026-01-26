@@ -1,5 +1,5 @@
 """
-Database models for Ultimate Trivia
+Database models for Wildcard Trivia
 """
 
 from datetime import datetime

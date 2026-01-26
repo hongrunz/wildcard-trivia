@@ -323,7 +323,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
           </BigScreenHeader>
 
           {/* Title */}
-          <GameTitle>Ultimate Trivia!</GameTitle>
+          <GameTitle>Wildcard Trivia!</GameTitle>
 
           {/* Display topics */}
           {currentQuestion.topics && currentQuestion.topics.length > 0 && (

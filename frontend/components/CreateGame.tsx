@@ -30,6 +30,7 @@ export default function CreateGame() {
   const [error, setError] = useState('');
   const [sessionMode, setSessionMode] = useState<'player' | 'display'>('player');
   const [deviceType, setDeviceType] = useState<'mobile' | 'web'>('web');
+  const [topic, setTopic] = useState('');
 
   // Detect device type on mount
   useEffect(() => {
@@ -53,7 +54,7 @@ export default function CreateGame() {
     try {
       const response = await api.createRoom({
         name: hostName.trim() || 'Host', // Default name for display mode
-        topics: [], // Topics will be collected from players
+        topics: deviceType == 'mobile' ? [topic] : [], // Topics will be collected from players
         questionsPerRound: numQuestions,
         timePerQuestion: timeLimit,
         sessionMode: sessionMode, // Pass session mode to backend
@@ -73,7 +74,7 @@ export default function CreateGame() {
   return (
     <PageContainer>
       <FormCard>
-        <Title>Ultimate Trivia!</Title>
+        <Title>Wildcard Trivia!</Title>
         
         {/* Show device mode info */}
         <InfoBox $variant={deviceType}>
@@ -103,13 +104,26 @@ export default function CreateGame() {
             </FieldContainer>
           )}
 
+          {sessionMode === 'player' && (
+            <FieldContainer>
+              <Label htmlFor="topic">Topic Suggestion:</Label>
+              <Input
+                id="topic"
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="Enter a topic for questions"
+              />
+            </FieldContainer>
+          )}
+
           <FieldContainer>
             <Label htmlFor="numQuestions">Number of questions to be asked:</Label>
             <Input
               id="numQuestions"
               type="number"
               value={numQuestions}
-              onChange={(e) => setNumQuestions(parseInt(e.target.value) || 5)}
+              onChange={(e) => setNumQuestions(parseInt(e.target.value) || DEFAULT_NUM_QUESTIONS)}
               min="1"
             />
           </FieldContainer>
@@ -120,7 +134,7 @@ export default function CreateGame() {
               id="timeLimit"
               type="number"
               value={timeLimit}
-              onChange={(e) => setTimeLimit(parseInt(e.target.value) || 20)}
+              onChange={(e) => setTimeLimit(parseInt(e.target.value) || DEFAULT_TIME_LIMIT)}
               placeholder="e.g., 20 seconds"
             />
           </FieldContainer>

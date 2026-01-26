@@ -1,6 +1,6 @@
-# Deploying Ultimate Trivia to Railway
+# Deploying Wildcard Trivia to Railway
 
-This guide will walk you through deploying your Ultimate Trivia application to Railway. The app consists of two services: a FastAPI backend and a Next.js frontend, plus a Redis database.
+This guide will walk you through deploying your Wildcard Trivia application to Railway. The app consists of two services: a FastAPI backend and a Next.js frontend, plus a Redis database.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ You'll deploy three components:
 2. Click **"New Project"**
 3. Select **"Deploy from GitHub repo"**
 4. Authorize Railway to access your GitHub account if needed
-5. Select your `ultimate-trivia` repository
+5. Select your `wildcard-trivia` repository
 6. Railway will create a project, but DON'T deploy yet - we need to configure it properly
 
 ### Step 2: Set Up Redis Database
@@ -118,7 +118,7 @@ Replace `https://your-backend-url.up.railway.app` with the backend URL you copie
 
 1. In the frontend service, go to **"Settings"**
 2. Scroll to **"Networking"** → Click **"Generate Domain"**
-3. Copy the generated frontend URL (e.g., `https://ultimate-trivia-production.up.railway.app`)
+3. Copy the generated frontend URL (e.g., `https://wildcard-trivia-production.up.railway.app`)
 4. **Go back to your Backend service**
 5. Click **"Variables"** tab
 6. Find the `FRONTEND_URL` variable and update it with your frontend URL:
@@ -346,7 +346,7 @@ railway open
 4. ✅ Set up custom domain (optional)
 5. ✅ Enable Railway notifications for deployment status
 
-Congratulations! Your Ultimate Trivia game is now live! 🎉
+Congratulations! Your Wildcard Trivia game is now live! 🎉
 
 ---
 

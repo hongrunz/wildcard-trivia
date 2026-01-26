@@ -13,8 +13,8 @@ from apis.websocket import manager
 from storage.client import get_redis_client
 
 app = FastAPI(
-    title="Ultimate Trivia API",
-    description="Backend API for Ultimate Trivia Game",
+    title="Wildcard Trivia API",
+    description="Backend API for Wildcard Trivia Game",
     version="1.0.0"
 )
 
@@ -63,7 +63,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str):
 async def root():
     """Root endpoint"""
     return {
-        "message": "Ultimate Trivia API",
+        "message": "Wildcard Trivia API",
         "version": "1.0.0",
         "docs": "/docs"
     }

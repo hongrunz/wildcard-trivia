@@ -20,7 +20,7 @@ const shadowsIntoLight = Shadows_Into_Light({
 });
 
 export const metadata: Metadata = {
-  title: "Ultimate Trivia!",
+  title: "Wildcard Trivia!",
   description: "Create and join trivia games",
 };
 

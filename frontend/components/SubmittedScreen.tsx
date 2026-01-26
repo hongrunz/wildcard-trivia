@@ -48,7 +48,7 @@ export default function SubmittedScreen({
           <CircularBadge>{currentQuestion}/{totalQuestions}</CircularBadge>
           {timer !== undefined && <CircularBadge>{timer}</CircularBadge>}
         </GameHeader>
-        <GameTitle>Ultimate Trivia!</GameTitle>
+        <GameTitle>Wildcard Trivia!</GameTitle>
         <FeedbackMessage>
           You are {isCorrect ? 'correct' : 'wrong'}!
         </FeedbackMessage>

@@ -1,4 +1,4 @@
-# Ultimate Trivia Game
+# Wildcard Trivia Game
 
 A real-time trivia game application built with Next.js (frontend) and FastAPI (backend). Create game rooms, join with friends, and test your knowledge!
 
@@ -33,7 +33,7 @@ Product Overview
 ## Project Structure
 
 ```
-ultimate-trivia/
+wildcard-trivia/
 ├── frontend/          # Frontend React components and utilities
 │   ├── components/    # React components
 │   └── lib/          # Frontend utilities (API client)
@@ -277,7 +277,7 @@ open -a RedisInsight
 2. Enter connection details:
    - **Host**: `localhost` (or your Redis host)
    - **Port**: `6379` (or your configured port)
-   - **Database Alias**: `Ultimate Trivia` (optional, for identification)
+   - **Database Alias**: `Wildcard Trivia` (optional, for identification)
    - **Username**: Leave empty (for local Redis)
    - **Password**: Leave empty (for local Redis without password)
    - **Database Index**: `0` (or your `REDIS_DB` value from `.env`)

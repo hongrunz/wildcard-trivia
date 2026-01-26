@@ -61,7 +61,7 @@ export default function JoinGame() {
   return (
     <PageContainer>
       <FormCard>
-        <Title>Ultimate Trivia!</Title>
+        <Title>Wildcard Trivia!</Title>
         
         <FormGroup>
           <FieldContainer>
