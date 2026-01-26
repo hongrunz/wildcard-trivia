@@ -3,7 +3,7 @@ Database models for Wildcard Trivia
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel
 from uuid import UUID
 
@@ -14,6 +14,7 @@ class RoomBase(BaseModel):
     topics: List[str] = []  # Topics are now optional, collected from players
     questions_per_round: int
     time_per_question: int
+    num_rounds: int = 1  # Total number of rounds in the game
 
 
 class RoomCreate(RoomBase):
@@ -24,6 +25,7 @@ class Room(RoomBase):
     room_id: UUID
     host_token: str
     status: str  # 'waiting', 'started', 'finished'
+    current_round: int = 1  # Current active round (1-indexed)
     created_at: datetime
     started_at: Optional[datetime] = None
     updated_at: datetime
@@ -64,11 +66,13 @@ class QuestionBase(BaseModel):
 
 class QuestionCreate(QuestionBase):
     room_id: UUID
+    round: int  # Which round this question belongs to
 
 
 class Question(QuestionBase):
     question_id: UUID
     room_id: UUID
+    round: int
     created_at: datetime
 
     class Config:
@@ -84,4 +88,4 @@ class RoomWithPlayers(BaseModel):
 class RoomWithQuestions(BaseModel):
     """Room with related questions"""
     room: Room
-    questions: List[Question]
+    questions: Dict[int, List[Question]]

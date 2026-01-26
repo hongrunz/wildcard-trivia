@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import GameFinished from './GameFinished';
+import BigScreenRoundFinished from './BigScreenRoundFinished';
 import { api, RoomResponse, LeaderboardResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
 import { useBackgroundMusic } from '../lib/useBackgroundMusic';
@@ -35,7 +36,7 @@ interface LeaderboardEntry {
   topicScore?: { [topic: string]: number };
 }
 
-type GameState = 'question' | 'waiting' | 'submitted' | 'finished';
+type GameState = 'question' | 'waiting' | 'submitted' | 'round_finished' | 'finished';
 
 export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   const [room, setRoom] = useState<RoomResponse | null>(null);
@@ -131,6 +132,11 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     fetchLeaderboard();
   }, [fetchLeaderboard]);
 
+  const handleRoundFinished = useCallback(() => {
+    setGameState('round_finished');
+    fetchLeaderboard();
+  }, [fetchLeaderboard]);
+
   const handleTimerExpired = useCallback(() => {
     // When answer timer expires, move to waiting (which triggers submitted next)
     if (gameState === 'question') {
@@ -154,6 +160,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     gameStartedAt,
     gameState,
     onGameFinished: handleGameFinished,
+    onRoundFinished: handleRoundFinished,
     onTimerExpired: handleTimerExpired,
     onQuestionChanged: handleQuestionChanged,
   });
@@ -168,6 +175,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   const handleWebSocketMessage = useCallback((message: {
     type: string;
     startedAt?: string;
+    currentRound?: number;
     player?: {
       playerId: string;
       playerName: string;
@@ -181,6 +189,13 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
           setGameStartedAt(startTime);
         }
       }
+      fetchRoom();
+      return;
+    }
+    
+    if (message.type === 'round_changed') {
+      // New round has started - fetch updated room data and reset to question state
+      setGameState('question');
       fetchRoom();
       return;
     }
@@ -284,18 +299,17 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     );
   }
 
-  const currentQuestion = room.questions[currentQuestionIndex];
-  
-  // Question loading state
-  if (!currentQuestion) {
+  // Round finished state (show between rounds)
+  if (gameState === 'round_finished') {
     return (
       <>
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
-          <BigScreenCard>
-            <GameTitle>Loading question {currentQuestionIndex + 1}...</GameTitle>
-          </BigScreenCard>
-        </GameScreenContainer>
+        <BigScreenRoundFinished
+          currentRound={room.currentRound}
+          totalRounds={room.numRounds}
+          leaderboard={leaderboard}
+          timer={timer}
+        />
       </>
     );
   }
@@ -310,6 +324,22 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
           finalScore={0} // Big screen doesn't have a score
           leaderboard={leaderboard}
         />
+      </>
+    );
+  }
+
+  const currentQuestion = room.questions[currentQuestionIndex];
+  
+  // Question loading state
+  if (!currentQuestion) {
+    return (
+      <>
+        <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
+        <GameScreenContainer>
+          <BigScreenCard>
+            <GameTitle>Loading question {currentQuestionIndex + 1}...</GameTitle>
+          </BigScreenCard>
+        </GameScreenContainer>
       </>
     );
   }
@@ -331,9 +361,6 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
                 {timer}
               </BigScreenBadge>
             </BigScreenHeader>
-
-            {/* Title */}
-            <GameTitle>Wildcard Trivia!</GameTitle>
 
             {/* Display topics */}
             {currentQuestion.topics && currentQuestion.topics.length > 0 && (

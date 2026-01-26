@@ -20,6 +20,7 @@ import { getSessionMode, getDeviceType } from '../lib/deviceDetection';
 
 const DEFAULT_NUM_QUESTIONS = 5;
 const DEFAULT_TIME_LIMIT = 20;
+const DEFAULT_NUM_ROUNDS = 3;
 
 export default function CreateGame() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function CreateGame() {
   const [sessionMode, setSessionMode] = useState<'player' | 'display'>('player');
   const [deviceType, setDeviceType] = useState<'mobile' | 'web'>('web');
   const [isMounted, setIsMounted] = useState(false);
+  const [numRounds, setNumRounds] = useState(DEFAULT_NUM_ROUNDS);
 
   // Detect device type and session mode after mount to avoid hydration mismatch
   useEffect(() => {
@@ -62,6 +64,7 @@ export default function CreateGame() {
         questionsPerRound: numQuestions,
         timePerQuestion: timeLimit,
         sessionMode: sessionMode, // Pass session mode to backend
+        numRounds: numRounds,
       });
 
       // Store host token
@@ -74,46 +77,6 @@ export default function CreateGame() {
       setIsLoading(false);
     }
   };
-
-  // Show loading state until mounted to avoid hydration mismatch
-  if (!isMounted) {
-    return (
-      <PageContainer>
-        <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
-        <FormCard>
-          <FormGroup>
-            <FieldContainer>
-              <Label htmlFor="numQuestions">Number of questions to be asked:</Label>
-              <Input
-                id="numQuestions"
-                type="number"
-                value={numQuestions}
-                onChange={(e) => setNumQuestions(parseInt(e.target.value) || DEFAULT_NUM_QUESTIONS)}
-                min="1"
-              />
-            </FieldContainer>
-
-            <FieldContainer>
-              <Label htmlFor="timeLimit">Time limit per question (in seconds):</Label>
-              <Input
-                id="timeLimit"
-                type="number"
-                value={timeLimit}
-                onChange={(e) => setTimeLimit(parseInt(e.target.value) || DEFAULT_TIME_LIMIT)}
-                placeholder="e.g., 20 seconds"
-              />
-            </FieldContainer>
-          </FormGroup>
-          {error && <ErrorText>{error}</ErrorText>}
-          <ButtonContainer>
-            <ButtonPrimary onClick={handleCreateRoom} disabled={isLoading}>
-              {isLoading ? 'Creating...' : 'Create Room'}
-            </ButtonPrimary>
-          </ButtonContainer>
-        </FormCard>
-      </PageContainer>
-    );
-  }
 
   return (
     <PageContainer>
@@ -161,7 +124,18 @@ export default function CreateGame() {
           )}
 
           <FieldContainer>
-            <Label htmlFor="numQuestions">Number of questions to be asked:</Label>
+            <Label htmlFor="numRounds">Number of rounds:</Label>
+            <Input
+              id="numRounds"
+              type="number"
+              value={numRounds}
+              onChange={(e) => setNumRounds(parseInt(e.target.value) || DEFAULT_NUM_ROUNDS)}
+              min="1"
+            />
+          </FieldContainer>
+
+          <FieldContainer>
+            <Label htmlFor="numQuestions">Number of questions to be asked each round:</Label>
             <Input
               id="numQuestions"
               type="number"

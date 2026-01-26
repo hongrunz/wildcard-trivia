@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import QuestionScreen from './QuestionScreen';
 import SubmittedScreen from './SubmittedScreen';
 import GameFinished from './GameFinished';
+import RoundFinished from './RoundFinished';
 import { api, tokenStorage, RoomResponse, LeaderboardResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
 import { useGameTimer } from '../lib/useGameTimer';
@@ -32,7 +33,7 @@ interface LeaderboardEntry {
   topicScore?: { [topic: string]: number };
 }
 
-type GameState = 'question' | 'waiting' | 'submitted' | 'finished';
+type GameState = 'question' | 'waiting' | 'submitted' | 'round_finished' | 'finished';
 
 export default function PlayerGame({ roomId }: PlayerGameProps) {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   
   const [room, setRoom] = useState<RoomResponse | null>(null);
   const [gameState, setGameState] = useState<GameState>('question');
+  
   const [isCorrect, setIsCorrect] = useState(false);
   const [score, setScore] = useState(0);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -128,7 +130,14 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
 
   // Timer callbacks
   const handleGameFinished = useCallback(() => {
+    console.log('🏁 GAME FINISHED');
     setGameState('finished');
+    fetchLeaderboard();
+  }, [fetchLeaderboard]);
+
+  const handleRoundFinished = useCallback(() => {
+    console.log('🎊 ROUND FINISHED');
+    setGameState('round_finished');
     fetchLeaderboard();
   }, [fetchLeaderboard]);
 
@@ -154,6 +163,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     gameStartedAt,
     gameState,
     onGameFinished: handleGameFinished,
+    onRoundFinished: handleRoundFinished,
     onTimerExpired: handleTimerExpired,
     onQuestionChanged: handleQuestionChanged,
   });
@@ -169,6 +179,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   const handleWebSocketMessage = useCallback((message: {
     type: string;
     startedAt?: string;
+    currentRound?: number;
     player?: {
       playerId: string;
       playerName: string;
@@ -182,6 +193,13 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
           setGameStartedAt(startTime);
         }
       }
+      fetchRoom();
+      return;
+    }
+    
+    if (message.type === 'round_changed') {
+      // New round has started - fetch updated room data and reset to question state
+      setGameState('question');
       fetchRoom();
       return;
     }
@@ -310,14 +328,15 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     return <div style={centeredScreenStyle}>Synchronizing with server...</div>;
   }
 
-  const currentQuestion = room.questions[currentQuestionIndex];
-  
-  // Question loading state
-  if (!currentQuestion) {
+  // Round finished state (show between rounds)
+  if (gameState === 'round_finished') {
     return (
-      <CenteredMessage>
-        <p>Loading question {currentQuestionIndex + 1}...</p>
-      </CenteredMessage>
+      <RoundFinished
+        currentRound={room.currentRound}
+        totalRounds={room.numRounds}
+        leaderboard={leaderboard}
+        timer={timer}
+      />
     );
   }
 
@@ -332,8 +351,20 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     );
   }
 
+  const currentQuestion = room.questions[currentQuestionIndex];
+  
+  // Question loading state
+  if (!currentQuestion) {
+    return (
+      <CenteredMessage>
+        <p>Loading question {currentQuestionIndex + 1}...</p>
+      </CenteredMessage>
+    );
+  }
+
   // Waiting state (answer submitted, waiting for others)
   if (gameState === 'waiting') {
+    console.log('⏳ RENDERING WAITING SCREEN', { timer });
     return (
       <PageContainer>
         <FormCard style={{ textAlign: 'center' }}>
@@ -342,7 +373,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
             <p style={{ fontSize: '1.5rem', margin: '2rem 0' }}>
               Your answer has been submitted!
             </p>
-            <p style={{ fontSize: '1rem', color: colors.textSecondary }}>
+            <p style={{ fontSize: '1rem', color: colors.typeSecondary }}>
               Time remaining: {timer}s
             </p>
           </CenteredMessage>

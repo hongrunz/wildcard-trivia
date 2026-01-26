@@ -10,6 +10,7 @@ export interface CreateRoomRequest {
   questionsPerRound: number;
   timePerQuestion: number;
   sessionMode?: 'player' | 'display'; // 'player' = mobile host joins as player, 'display' = web big screen
+  numRounds: number;
 }
 
 export interface CreateRoomResponse {
@@ -51,6 +52,8 @@ export interface RoomResponse {
   collectedTopics: string[];  // Topics submitted by players
   questionsPerRound: number;
   timePerQuestion: number;
+  numRounds: number;  // Total number of rounds
+  currentRound: number;  // Current active round (1-indexed)
   hostName: string;
   players: Player[];
   status: 'waiting' | 'started' | 'finished';
