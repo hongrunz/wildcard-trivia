@@ -10,6 +10,7 @@ export interface CreateRoomRequest {
   questionsPerRound: number;
   timePerQuestion: number;
   sessionMode?: 'player' | 'display'; // 'player' = mobile host joins as player, 'display' = web big screen
+  numRounds: number;
 }
 
 export interface CreateRoomResponse {
@@ -51,6 +52,8 @@ export interface RoomResponse {
   collectedTopics: string[];  // Topics submitted by players
   questionsPerRound: number;
   timePerQuestion: number;
+  numRounds: number;  // Total number of rounds
+  currentRound: number;  // Current active round (1-indexed)
   hostName: string;
   players: Player[];
   status: 'waiting' | 'started' | 'finished';
@@ -168,6 +171,19 @@ export const api = {
         playerToken: playerToken,
       },
       body: JSON.stringify({ questionId, answer }),
+    });
+  },
+
+  /**
+   * Submit a topic for the next round
+   */
+  async submitRoundTopic(roomId: string, playerToken: string, topic: string): Promise<{ success: boolean }> {
+    return fetchAPI<{ success: boolean }>(`/api/rooms/${roomId}/submit-topic`, {
+      method: 'POST',
+      headers: {
+        playerToken: playerToken,
+      },
+      body: JSON.stringify({ topic }),
     });
   },
 };

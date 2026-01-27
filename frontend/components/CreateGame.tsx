@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import {
   PageContainer,
   FormCard,
-  Title,
   FormGroup,
   FieldContainer,
   Label,
@@ -19,8 +18,9 @@ import { GameTitleImage } from './styled/GameComponents';
 import { api, tokenStorage } from '../lib/api';
 import { getSessionMode, getDeviceType } from '../lib/deviceDetection';
 
-const DEFAULT_NUM_QUESTIONS = 5;
-const DEFAULT_TIME_LIMIT = 20;
+const DEFAULT_NUM_QUESTIONS = 3;
+const DEFAULT_TIME_LIMIT = 8;
+const DEFAULT_NUM_ROUNDS = 3;
 
 export default function CreateGame() {
   const router = useRouter();
@@ -29,16 +29,21 @@ export default function CreateGame() {
   const [timeLimit, setTimeLimit] = useState(DEFAULT_TIME_LIMIT);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [topic, setTopic] = useState('');
   const [sessionMode, setSessionMode] = useState<'player' | 'display'>('player');
   const [deviceType, setDeviceType] = useState<'mobile' | 'web'>('web');
-  const [topic, setTopic] = useState('');
+  const [isMounted, setIsMounted] = useState(false);
+  const [numRounds, setNumRounds] = useState(DEFAULT_NUM_ROUNDS);
 
-  // Detect device type on mount
+  // Detect device type and session mode after mount to avoid hydration mismatch
   useEffect(() => {
+    // Batch updates to minimize re-renders
     const mode = getSessionMode();
     const device = getDeviceType();
+    
     setSessionMode(mode);
     setDeviceType(device);
+    setIsMounted(true);
   }, []);
 
   const handleCreateRoom = async () => {
@@ -55,10 +60,11 @@ export default function CreateGame() {
     try {
       const response = await api.createRoom({
         name: hostName.trim() || 'Host', // Default name for display mode
-        topics: deviceType == 'mobile' ? [topic] : [], // Topics will be collected from players
+        topics: deviceType === 'mobile' ? [topic] : [], // Topics will be collected from players
         questionsPerRound: numQuestions,
         timePerQuestion: timeLimit,
         sessionMode: sessionMode, // Pass session mode to backend
+        numRounds: numRounds,
       });
 
       // Store host token
@@ -104,7 +110,7 @@ export default function CreateGame() {
             </FieldContainer>
           )}
 
-          {sessionMode === 'player' && (
+          {deviceType === 'mobile' && (
             <FieldContainer>
               <Label htmlFor="topic">Topic Suggestion:</Label>
               <Input
@@ -118,7 +124,18 @@ export default function CreateGame() {
           )}
 
           <FieldContainer>
-            <Label htmlFor="numQuestions">Number of questions to be asked:</Label>
+            <Label htmlFor="numRounds">Number of rounds:</Label>
+            <Input
+              id="numRounds"
+              type="number"
+              value={numRounds}
+              onChange={(e) => setNumRounds(parseInt(e.target.value) || DEFAULT_NUM_ROUNDS)}
+              min="1"
+            />
+          </FieldContainer>
+
+          <FieldContainer>
+            <Label htmlFor="numQuestions">Number of questions to be asked each round:</Label>
             <Input
               id="numQuestions"
               type="number"

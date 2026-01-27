@@ -44,6 +44,19 @@ Return ONLY a valid JSON array of objects. Each object MUST have:
 - "options": array of exactly 4 strings
 - "correct_answer": integer index 0-3 (0 means first option)
 - "explanation": string
+
+IMPORTANT: Return ONLY the JSON array. No trailing commas. No markdown formatting. No explanations. Just valid JSON.
+
+Example format:
+[
+  {{
+    "question": "What is the capital of France?",
+    "topics": ["Geography"],
+    "options": ["London", "Berlin", "Paris", "Madrid"],
+    "correct_answer": 2,
+    "explanation": "Paris is the capital and most populous city of France."
+  }}
+]
 """
 
     contents = [
@@ -53,9 +66,9 @@ Return ONLY a valid JSON array of objects. Each object MUST have:
         )
     ]
 
-    # Configure generation with higher temperature for more creative/varied questions
+    # Configure generation with moderate temperature for creative but reliable output
     config = types.GenerateContentConfig(
-        temperature=1.5,  # Increased from default 1.0 for more variety
+        temperature=1.0,  # Balanced for creativity while maintaining JSON reliability
     )
 
     # Non-streaming: easier to parse reliably
@@ -93,15 +106,33 @@ Return ONLY a valid JSON array of objects. Each object MUST have:
         response_text = response_text[:-3]
     response_text = response_text.strip()
 
+    # Clean up common JSON issues from LLM responses
+    def clean_json(text: str) -> str:
+        """Remove trailing commas and other common JSON issues from LLM output"""
+        import re
+        # Remove trailing commas before closing brackets/braces
+        text = re.sub(r',(\s*[}\]])', r'\1', text)
+        # Remove trailing commas at end of lines
+        text = re.sub(r',(\s*\n)', r'\1', text)
+        return text
+
     try:
         questions = json.loads(response_text)
         logger.info(f"Successfully parsed JSON, got {len(questions) if isinstance(questions, list) else 0} items")
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON: {e}")
-        logger.error(f"Problematic response:\n{response_text[:500]}")
-        raise ValueError(
-            f"Failed to parse Gemini API response as JSON: {e}. Response: {response_text[:200]}"
-        ) from e
+        # Try cleaning the JSON and parsing again
+        logger.warning(f"Initial JSON parse failed: {e}. Attempting to clean JSON...")
+        cleaned_text = clean_json(response_text)
+        try:
+            questions = json.loads(cleaned_text)
+            logger.info(f"Successfully parsed cleaned JSON, got {len(questions) if isinstance(questions, list) else 0} items")
+        except json.JSONDecodeError as e2:
+            logger.error(f"Failed to parse JSON even after cleaning: {e2}")
+            logger.error(f"Original error: {e}")
+            logger.error(f"Problematic response:\n{response_text[:1000]}")
+            raise ValueError(
+                f"Failed to parse Gemini API response as JSON: {e}. Response: {response_text[:200]}"
+            ) from e2
 
     formatted: List[Dict[str, Any]] = []
     if not isinstance(questions, list):

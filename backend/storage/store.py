@@ -32,9 +32,9 @@ def _room_players_key(room_id: UUID) -> str:
     return f"room:{room_id}:players"
 
 
-def _room_questions_key(room_id: UUID) -> str:
-    """Get Redis key for room questions list"""
-    return f"room:{room_id}:questions"
+def _room_questions_key(room_id: UUID, round: int) -> str:
+    """Get Redis key for room questions list by round"""
+    return f"room:{room_id}:{round}:questions"
 
 
 def _room_scores_key(room_id: UUID) -> str:
@@ -52,9 +52,9 @@ def _player_token_key(player_token: str) -> str:
     return f"player_token:{player_token}"
 
 
-def _room_topics_key(room_id: UUID) -> str:
+def _room_topics_key(room_id: UUID, round: int) -> str:
     """Get Redis key for room topics set"""
-    return f"room:{room_id}:topics"
+    return f"room:{room_id}:{round}:topics"
 
 
 class RoomStore:
@@ -78,8 +78,10 @@ class RoomStore:
             "questions_per_round": str(room_data.questions_per_round),
             "time_per_question": str(room_data.time_per_question),
             "status": "waiting",
+            "current_round": "1",  # Start at round 1
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
+            "num_rounds": str(room_data.num_rounds),
         }
         
         # Store room as hash
@@ -95,6 +97,7 @@ class RoomStore:
         room_dict["topics"] = room_data.topics  # Restore as list for model
         room_dict["questions_per_round"] = room_data.questions_per_round
         room_dict["time_per_question"] = room_data.time_per_question
+        room_dict["num_rounds"] = room_data.num_rounds
         return Room(**room_dict)
 
     @staticmethod
@@ -112,6 +115,8 @@ class RoomStore:
         room_data["topics"] = json.loads(room_data.get("topics", "[]"))
         room_data["questions_per_round"] = int(room_data.get("questions_per_round", "0"))
         room_data["time_per_question"] = int(room_data.get("time_per_question", "0"))
+        room_data["num_rounds"] = int(room_data.get("num_rounds", "1"))
+        room_data["current_round"] = int(room_data.get("current_round", "1"))
         room_data["room_id"] = UUID(room_data["room_id"])
         room_data["created_at"] = datetime.fromisoformat(room_data["created_at"])
         room_data["updated_at"] = datetime.fromisoformat(room_data["updated_at"])
@@ -149,6 +154,31 @@ class RoomStore:
             "status": status,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
+        if started_at:
+            update_data["started_at"] = started_at.isoformat()
+        
+        r.hset(room_key, mapping=update_data)
+        
+        return RoomStore.get_room(room_id)
+    
+    @staticmethod
+    def update_room_round(room_id: UUID, current_round: int, started_at: Optional[datetime] = None) -> Room:
+        """Update current round and optionally reset the timer"""
+        r = get_redis_client()
+        
+        room_key = _room_key(room_id)
+        
+        # Check if room exists
+        if not r.exists(room_key):
+            raise ValueError(f"Room {room_id} not found")
+        
+        from datetime import timezone
+        update_data = {
+            "current_round": str(current_round),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Update started_at if provided (for resetting timer on new round)
         if started_at:
             update_data["started_at"] = started_at.isoformat()
         
@@ -334,7 +364,7 @@ class TopicStore:
     """Store for topic operations"""
 
     @staticmethod
-    def add_topic(room_id: UUID, player_id: UUID, topic: str) -> None:
+    def add_topic(room_id: UUID, player_id: UUID, topic: str, round: int) -> None:
         """Add a topic submitted by a player"""
         r = get_redis_client()
         
@@ -343,25 +373,25 @@ class TopicStore:
             raise ValueError("Room not found")
         
         # Store topic in Redis set (automatically handles duplicates)
-        topics_key = _room_topics_key(room_id)
+        topics_key = _room_topics_key(room_id, round)
         r.sadd(topics_key, topic.strip())
     
     @staticmethod
-    def get_topics(room_id: UUID) -> List[str]:
+    def get_topics(room_id: UUID, round: int) -> List[str]:
         """Get all topics submitted for a room"""
         r = get_redis_client()
         
-        topics_key = _room_topics_key(room_id)
+        topics_key = _room_topics_key(room_id, round)
         topics = r.smembers(topics_key)
         
         return sorted([topic for topic in topics if topic])
     
     @staticmethod
-    def clear_topics(room_id: UUID) -> None:
+    def clear_topics(room_id: UUID, round: int) -> None:
         """Clear all topics for a room"""
         r = get_redis_client()
         
-        topics_key = _room_topics_key(room_id)
+        topics_key = _room_topics_key(room_id, round)
         r.delete(topics_key)
 
 
@@ -382,6 +412,7 @@ class QuestionStore:
             question_dict = {
                 "question_id": str(question_id),
                 "room_id": str(q.room_id),
+                "round": str(q.round),
                 "question_text": q.question_text,
                 "topics": json.dumps(q.topics),
                 "options": json.dumps(q.options),
@@ -392,7 +423,7 @@ class QuestionStore:
             }
             
             # Store question as JSON string in list
-            questions_key = _room_questions_key(q.room_id)
+            questions_key = _room_questions_key(q.room_id, q.round)
             r.rpush(questions_key, json.dumps(question_dict))
             
             # Create Question object
@@ -400,6 +431,7 @@ class QuestionStore:
             question_dict["options"] = q.options
             question_dict["correct_answer"] = q.correct_answer
             question_dict["question_index"] = q.question_index
+            question_dict["round"] = q.round
             question_dict["question_id"] = question_id
             question_dict["room_id"] = q.room_id
             question_dict["created_at"] = now
@@ -409,10 +441,21 @@ class QuestionStore:
 
     @staticmethod
     def get_questions_by_room(room_id: UUID) -> List[Question]:
-        """Get all questions for a room"""
+        """Get all questions for the current round of a room"""
+        # Get the room to find current round
+        room = RoomStore.get_room(room_id)
+        if not room:
+            return []
+        
+        # Get questions for current round
+        return QuestionStore.get_questions_by_room_and_round(room_id, room.current_round)
+    
+    @staticmethod
+    def get_questions_by_room_and_round(room_id: UUID, round: int) -> List[Question]:
+        """Get all questions for a specific room and round"""
         r = get_redis_client()
         
-        questions_key = _room_questions_key(room_id)
+        questions_key = _room_questions_key(room_id, round)
         question_strings = r.lrange(questions_key, 0, -1)
         
         if not question_strings:
@@ -423,6 +466,7 @@ class QuestionStore:
             q_data = json.loads(q_str)
             q_data["question_id"] = UUID(q_data["question_id"])
             q_data["room_id"] = UUID(q_data["room_id"])
+            q_data["round"] = int(q_data.get("round", "1"))
             q_data["topics"] = json.loads(q_data.get("topics", "[]"))
             q_data["options"] = json.loads(q_data["options"])
             q_data["correct_answer"] = int(q_data["correct_answer"])

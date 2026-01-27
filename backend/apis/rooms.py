@@ -21,6 +21,7 @@ class CreateRoomRequest(BaseModel):
     topics: Optional[list[str]] = []  # Topics are now optional, collected from players
     questionsPerRound: int
     timePerQuestion: int
+    numRounds: int = 1  # Number of rounds in the game
     sessionMode: Optional[str] = 'player'  # 'player' or 'display'
 
 
@@ -63,6 +64,8 @@ class RoomResponse(BaseModel):
     collectedTopics: list[str]  # Topics submitted by players
     questionsPerRound: int
     timePerQuestion: int
+    numRounds: int  # Total number of rounds
+    currentRound: int  # Current active round (1-indexed)
     hostName: str
     players: list[PlayerResponse]
     status: str
@@ -98,6 +101,7 @@ async def create_room(request: CreateRoomRequest):
             topics=request.topics or [],  # Default to empty list if not provided
             questions_per_round=request.questionsPerRound,
             time_per_question=request.timePerQuestion,
+            num_rounds=request.numRounds,
         )
         
         room = RoomStore.create_room(room_data)
@@ -154,8 +158,8 @@ async def get_room(room_id: str):
                 for q in questions
             ]
         
-        # Get collected topics
-        collected_topics = TopicStore.get_topics(room_uuid)
+        # Get collected topics for current round
+        collected_topics = TopicStore.get_topics(room_uuid, room.current_round)
         
         return RoomResponse(
             roomId=str(room.room_id),
@@ -164,6 +168,8 @@ async def get_room(room_id: str):
             collectedTopics=collected_topics,
             questionsPerRound=room.questions_per_round,
             timePerQuestion=room.time_per_question,
+            numRounds=room.num_rounds,
+            currentRound=room.current_round,
             hostName=room.host_name,
             players=players_response,
             status=room.status,
@@ -198,8 +204,8 @@ async def join_room(room_id: str, request: JoinRoomRequest):
         
         player = PlayerStore.create_player(room_uuid, request.playerName)
         
-        # Add topic (now required)
-        TopicStore.add_topic(room_uuid, player.player_id, request.topic)
+        # Add topic for round 1 (now required)
+        TopicStore.add_topic(room_uuid, player.player_id, request.topic, round=1)
         
         # Broadcast player joined event
         await manager.broadcast_to_room(room_id, {
@@ -251,8 +257,8 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
         if not players:
             raise HTTPException(status_code=400, detail="Cannot start game without players. Please wait for players to join.")
         
-        # Get collected topics from players
-        collected_topics = TopicStore.get_topics(room_uuid)
+        # Get collected topics from players for round 1
+        collected_topics = TopicStore.get_topics(room_uuid, round=1)
         
         # Use collected topics if available, otherwise fall back to room topics
         topics_to_use = collected_topics if collected_topics else room.topics
@@ -260,7 +266,7 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
         if not topics_to_use:
             raise HTTPException(status_code=400, detail="No topics submitted. Please wait for players to submit topics.")
         
-        # Generate questions
+        # Generate questions for round 1
         sample_questions = generate_questions_with_llm(topics_to_use, room.questions_per_round)
         
         # Create questions in database
@@ -268,6 +274,7 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
         questions_to_create = [
             QuestionCreate(
                 room_id=room_uuid,
+                round=1,
                 question_text=q["question"],
                 topics=q.get("topics", []),
                 options=q["options"],
@@ -297,6 +304,7 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
         await manager.broadcast_to_room(room_id, {
             "type": "game_started",
             "startedAt": started_at.isoformat(),
+            "currentRound": 1,
             "questionsCount": len(sample_questions)
         })
         
@@ -307,11 +315,16 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
             playerToken=host_player.player_token if host_player else None
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail="Invalid room ID")
+        # ValueError could be from UUID parsing or from Store methods
+        error_msg = str(e)
+        if "Room not found" in error_msg or "Player not found" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg)
+        raise HTTPException(status_code=400, detail=f"Invalid data: {error_msg}")
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Return the actual error message for debugging
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 
 class SubmitAnswerRequest(BaseModel):
@@ -432,6 +445,127 @@ async def get_leaderboard(room_id: str):
         ]
         
         return LeaderboardResponse(leaderboard=leaderboard_entries)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid room ID")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SubmitTopicRequest(BaseModel):
+    topic: str
+
+
+class SubmitTopicResponse(BaseModel):
+    success: bool
+    submittedCount: int
+    totalPlayers: int
+
+
+@router.post("/{room_id}/submit-topic", response_model=SubmitTopicResponse)
+async def submit_topic(
+    room_id: str,
+    request: SubmitTopicRequest,
+    playerToken: Optional[str] = Header(None, alias="playertoken")
+):
+    """Submit a topic for the next round"""
+    try:
+        if not playerToken:
+            raise HTTPException(status_code=401, detail="Player token required")
+        
+        room_uuid = UUID(room_id)
+        room = RoomStore.get_room(room_uuid)
+        
+        if not room:
+            raise HTTPException(status_code=404, detail="Room not found")
+        
+        # Get player by token
+        player = PlayerStore.get_player_by_token(playerToken)
+        if not player:
+            raise HTTPException(status_code=404, detail="Player not found")
+        
+        if player.room_id != room_uuid:
+            raise HTTPException(status_code=403, detail="Player does not belong to this room")
+        
+        # Validate topic
+        topic = request.topic.strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="Topic cannot be empty")
+        
+        if len(topic) > 50:
+            raise HTTPException(status_code=400, detail="Topic must be 50 characters or less")
+        
+        # Add topic to the next round
+        next_round = room.current_round + 1
+        TopicStore.add_topic(room_uuid, player.player_id, topic, next_round)
+        
+        # Get all topics for the next round to count submissions
+        topics = TopicStore.get_topics(room_uuid, next_round)
+        submitted_count = len(topics)
+        
+        # Get all players in the room to count total
+        players = PlayerStore.get_players_by_room(room_uuid)
+        total_players = len(players)
+        
+        # Broadcast topic submitted event
+        await manager.broadcast_to_room(room_id, {
+            "type": "topic_submitted",
+            "playerId": str(player.player_id),
+            "playerName": player.player_name,
+            "topic": topic,
+            "submittedCount": submitted_count,
+            "totalPlayers": total_players
+        })
+        
+        # If all players have submitted, generate questions and start next round
+        if submitted_count >= total_players:
+            # Broadcast that all topics are collected
+            await manager.broadcast_to_room(room_id, {
+                "type": "all_topics_submitted",
+                "topics": topics,
+                "nextRound": next_round
+            })
+            
+            # Generate questions for the next round
+            sample_questions = generate_questions_with_llm(topics, room.questions_per_round)
+            
+            # Create questions in database
+            from storage.models import QuestionCreate
+            questions_to_create = [
+                QuestionCreate(
+                    room_id=room_uuid,
+                    round=next_round,
+                    question_text=q["question"],
+                    topics=q.get("topics", []),
+                    options=q["options"],
+                    correct_answer=q["correct_answer"],
+                    explanation=q.get("explanation"),
+                    question_index=i
+                )
+                for i, q in enumerate(sample_questions)
+            ]
+            
+            QuestionStore.create_questions(questions_to_create)
+            
+            # Update room's current round
+            from datetime import timezone
+            new_started_at = datetime.now(timezone.utc)
+            RoomStore.update_room_round(room_uuid, next_round, new_started_at)
+            
+            # Broadcast round changed event with new timestamp for timer sync
+            await manager.broadcast_to_room(room_id, {
+                "type": "round_changed",
+                "startedAt": new_started_at.isoformat(),
+                "currentRound": next_round,
+                "questionsCount": len(sample_questions)
+            })
+        
+        return SubmitTopicResponse(
+            success=True,
+            submittedCount=submitted_count,
+            totalPlayers=total_players
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid room ID")
     except HTTPException:

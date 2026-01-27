@@ -1,13 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
+import { useMachine } from '@xstate/react';
 import { useRouter } from 'next/navigation';
 import QuestionScreen from './QuestionScreen';
 import SubmittedScreen from './SubmittedScreen';
 import GameFinished from './GameFinished';
-import { api, tokenStorage, RoomResponse, LeaderboardResponse } from '../lib/api';
+import RoundFinished from './RoundFinished';
+import NewRoundTopicSubmission from './NewRoundTopicSubmission';
+import { api, tokenStorage, LeaderboardResponse, RoomResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
-import { useGameTimer } from '../lib/useGameTimer';
+import { useGameTimerDisplay } from '../lib/useGameTimerDisplay';
+import { gameStateMachine, type LeaderboardEntry } from '../lib/gameStateMachine';
 import { 
   PageContainer, 
   FormCard, 
@@ -24,28 +28,12 @@ interface PlayerGameProps {
   roomId: string;
 }
 
-interface LeaderboardEntry {
-  playerId: string;
-  rank: number;
-  playerName: string;
-  points: number;
-  topicScore?: { [topic: string]: number };
-}
-
-type GameState = 'question' | 'submitted' | 'finished';
-
 export default function PlayerGame({ roomId }: PlayerGameProps) {
   const router = useRouter();
   const playerToken = tokenStorage.getPlayerToken(roomId);
   
-  const [room, setRoom] = useState<RoomResponse | null>(null);
-  const [gameState, setGameState] = useState<GameState>('question');
-  const [isCorrect, setIsCorrect] = useState(false);
-  const [score, setScore] = useState(0);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [gameStartedAt, setGameStartedAt] = useState<Date | null>(null);
+  // Use XState machine for formal state management
+  const [state, send] = useMachine(gameStateMachine);
 
   // Check if player has a valid token - if not, show error immediately
   const hasNoToken = !playerToken;
@@ -89,67 +77,93 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       
       // Always fetch fresh room data to ensure player names are up to date
       const currentRoom = await api.getRoom(roomId);
-      setRoom(currentRoom);
+      send({ type: 'ROOM_UPDATED', room: currentRoom });
       
       const formattedLeaderboard = mapLeaderboardData(leaderboardData, currentRoom.players);
-      setLeaderboard(formattedLeaderboard);
+      send({ type: 'LEADERBOARD_UPDATED', leaderboard: formattedLeaderboard });
     } catch {
-      setLeaderboard([]);
+      send({ type: 'LEADERBOARD_UPDATED', leaderboard: [] });
     }
-  }, [roomId, mapLeaderboardData]);
+  }, [roomId, mapLeaderboardData, send]);
 
   const fetchRoom = useCallback(async () => {
     try {
       const roomData = await api.getRoom(roomId);
-      setRoom(roomData);
 
       if (roomData.status === 'started' && roomData.questions) {
-        setIsLoading(false);
-        
         // Parse and set game start timestamp for timer synchronization
         if (roomData.startedAt) {
           const startTime = new Date(roomData.startedAt);
           if (!isNaN(startTime.getTime())) {
-            setGameStartedAt(startTime);
+            send({ type: 'GAME_LOADED', room: roomData, startedAt: startTime });
           }
         }
         
         fetchLeaderboard();
       } else if (roomData.status === 'finished') {
-        setGameState('finished');
-        setIsLoading(false);
-        fetchLeaderboard();
+        send({ type: 'ROOM_UPDATED', room: roomData });
+        await fetchLeaderboard();
+        send({ type: 'GAME_FINISHED', leaderboard: state.context.leaderboard });
+      } else {
+        send({ type: 'ROOM_UPDATED', room: roomData });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load game');
-      setIsLoading(false);
+      send({ type: 'ERROR', error: err instanceof Error ? err.message : 'Failed to load game' });
     }
-  }, [roomId, fetchLeaderboard]);
+  }, [roomId, fetchLeaderboard, state.context.leaderboard, send]);
 
-  // Timer callbacks
-  const handleGameFinished = useCallback(() => {
-    setGameState('finished');
-    fetchLeaderboard();
-  }, [fetchLeaderboard]);
+  const handleSubmitTopic = useCallback(async (topic: string) => {
+    if (!playerToken) return;
+    
+    try {
+      await api.submitRoundTopic(roomId, playerToken, topic);
+    } catch (error) {
+      console.error('Failed to submit topic:', error);
+      throw error;
+    }
+  }, [roomId, playerToken]);
 
-  const handleTimerExpired = useCallback(() => {
-    setIsCorrect(false);
-    setGameState('submitted');
-  }, []);
+  // Get current question index from state machine context
+  const currentQuestionIndex = state.context.currentQuestionIndex;
 
-  const handleQuestionChanged = useCallback(() => {
-    setGameState('question');
-  }, []);
-
-  // Game timer hook
-  const { timer, currentQuestionIndex } = useGameTimer({
-    room,
-    gameStartedAt,
-    gameState,
-    onGameFinished: handleGameFinished,
-    onTimerExpired: handleTimerExpired,
-    onQuestionChanged: handleQuestionChanged,
+  // Game timer display hook (synchronized to server time)
+  const { timer } = useGameTimerDisplay({
+    room: state.context.room,
+    gameState: state.value as 'question' | 'submitted' | 'roundFinished' | 'newRound' | 'finished',
+    gameStartedAt: state.context.gameStartedAt,
+    currentQuestionIndex: state.context.currentQuestionIndex,
   });
+
+  // Send TIMER_EXPIRED when question timer runs out (synchronized to server time)
+  useEffect(() => {
+    if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.gameStartedAt) {
+      const calculateRemainingTime = () => {
+        const now = new Date();
+        const elapsedMs = now.getTime() - state.context.gameStartedAt!.getTime();
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        
+        const REVIEW_TIME_SECONDS = 8;
+        const totalTimePerCycle = state.context.room!.timePerQuestion + REVIEW_TIME_SECONDS;
+        const timeInCurrentCycle = elapsedSeconds % totalTimePerCycle;
+        
+        if (timeInCurrentCycle < state.context.room!.timePerQuestion) {
+          return state.context.room!.timePerQuestion - timeInCurrentCycle;
+        }
+        return 0; // Already past question phase
+      };
+      
+      const remainingSeconds = calculateRemainingTime();
+      if (remainingSeconds > 0) {
+        const timeout = setTimeout(() => {
+          send({ type: 'TIMER_EXPIRED' });
+        }, remainingSeconds * 1000);
+        return () => clearTimeout(timeout);
+      } else {
+        // Already past, send immediately
+        send({ type: 'TIMER_EXPIRED' });
+      }
+    }
+  }, [state.value, state.context.room?.timePerQuestion, state.context.gameStartedAt, send]);
 
   // Initial room fetch
   useEffect(() => {
@@ -159,9 +173,10 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   }, []);
 
   // WebSocket message handler
-  const handleWebSocketMessage = useCallback((message: {
+  const handleWebSocketMessage = useCallback(async (message: {
     type: string;
     startedAt?: string;
+    currentRound?: number;
     player?: {
       playerId: string;
       playerName: string;
@@ -169,13 +184,19 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     };
   }) => {
     if (message.type === 'game_started') {
+      fetchRoom();
+      return;
+    }
+    
+    if (message.type === 'round_changed') {
+      // New round has started - update timer sync and fetch updated room data
+      const roomData = await api.getRoom(roomId);
       if (message.startedAt) {
         const startTime = new Date(message.startedAt);
         if (!isNaN(startTime.getTime())) {
-          setGameStartedAt(startTime);
+          send({ type: 'ROUND_CHANGED', startedAt: startTime, room: roomData });
         }
       }
-      fetchRoom();
       return;
     }
     
@@ -185,30 +206,9 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     }
     
     if (message.type === 'player_joined' && message.player) {
-      setRoom((prevRoom) => {
-        if (!prevRoom) return null;
-        
-        const playerExists = prevRoom.players.some(
-          (p) => p.playerId === message.player!.playerId
-        );
-        
-        if (playerExists) return prevRoom;
-        
-        return {
-          ...prevRoom,
-          players: [
-            ...prevRoom.players,
-            {
-              playerId: message.player!.playerId,
-              playerName: message.player!.playerName,
-              score: 0,
-              joinedAt: message.player!.joinedAt,
-            }
-          ],
-        };
-      });
+      send({ type: 'PLAYER_JOINED', player: message.player });
     }
-  }, [fetchRoom, fetchLeaderboard]);
+  }, [fetchRoom, fetchLeaderboard, roomId, send]);
 
   // WebSocket connection
   useWebSocket(roomId, {
@@ -216,19 +216,19 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   });
 
   const handleSubmitAnswer = async (answer: string) => {
-    if (!room?.questions || !playerToken) return;
+    if (!state.context.room?.questions || !playerToken) return;
 
-    const currentQuestion = room.questions[currentQuestionIndex];
+    const currentQuestion = state.context.room.questions[currentQuestionIndex];
     
     try {
       const response = await api.submitAnswer(roomId, playerToken, currentQuestion.id, answer);
       
-      if (response.isCorrect) {
-        setScore(response.currentScore);
-      }
+      send({ 
+        type: 'ANSWER_SUBMITTED', 
+        isCorrect: response.isCorrect, 
+        score: response.currentScore 
+      });
       
-      setIsCorrect(response.isCorrect);
-      setGameState('submitted');
       fetchLeaderboard();
     } catch {
       // Fallback to local validation if API fails
@@ -236,12 +236,13 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
         answer.toLowerCase().trim() === 
         currentQuestion.options[currentQuestion.correctAnswer].toLowerCase().trim();
       
-      if (isAnswerCorrect) {
-        setScore((prevScore) => prevScore + 1);
-      }
+      const newScore = isAnswerCorrect ? state.context.score + 1 : state.context.score;
       
-      setIsCorrect(isAnswerCorrect);
-      setGameState('submitted');
+      send({ 
+        type: 'ANSWER_SUBMITTED', 
+        isCorrect: isAnswerCorrect, 
+        score: newScore 
+      });
     }
   };
 
@@ -284,26 +285,60 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   }
 
   // Loading state
-  if (isLoading) {
+  if (state.value === 'loading') {
     return <div style={centeredScreenStyle}>Loading game...</div>;
   }
 
   // Error state
-  if (error) {
-    return <div style={centeredScreenStyle}>Error: {error}</div>;
+  if (state.value === 'error' || state.context.error) {
+    return <div style={centeredScreenStyle}>Error: {state.context.error}</div>;
   }
 
   // Waiting for game to start
-  if (!room?.questions?.length) {
+  if (!state.context.room?.questions?.length) {
     return <div style={centeredScreenStyle}>Waiting for game to start...</div>;
   }
 
   // Check for server sync during active gameplay
-  if ((gameState === 'question' || gameState === 'submitted') && !gameStartedAt) {
+  if ((state.value === 'question' || state.value === 'submitted') && !state.context.gameStartedAt) {
     return <div style={centeredScreenStyle}>Synchronizing with server...</div>;
   }
 
-  const currentQuestion = room.questions[currentQuestionIndex];
+  // Round finished state (show between rounds)
+  if (state.value === 'roundFinished') {
+    return (
+      <RoundFinished
+        currentRound={state.context.room.currentRound}
+        totalRounds={state.context.room.numRounds}
+        leaderboard={state.context.leaderboard}
+        timer={timer}
+      />
+    );
+  }
+
+  // New round topic submission state
+  if (state.value === 'newRound') {
+    return (
+      <NewRoundTopicSubmission
+        currentRound={state.context.room.currentRound + 1}
+        totalRounds={state.context.room.numRounds}
+        onSubmitTopic={handleSubmitTopic}
+      />
+    );
+  }
+
+  // Game finished state
+  if (state.value === 'finished') {
+    return (
+      <GameFinished
+        totalQuestions={state.context.room.questionsPerRound}
+        finalScore={state.context.score}
+        leaderboard={state.context.leaderboard}
+      />
+    );
+  }
+
+  const currentQuestion = state.context.room.questions[currentQuestionIndex];
   
   // Question loading state
   if (!currentQuestion) {
@@ -314,27 +349,16 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     );
   }
 
-  // Game finished state
-  if (gameState === 'finished') {
-    return (
-      <GameFinished
-        totalQuestions={room.questionsPerRound}
-        finalScore={score}
-        leaderboard={leaderboard}
-      />
-    );
-  }
-
-  // Answer submitted state
-  if (gameState === 'submitted') {
+  // Answer submitted state (show results for 8 seconds)
+  if (state.value === 'submitted') {
     return (
       <SubmittedScreen
         currentQuestion={currentQuestionIndex + 1}
-        totalQuestions={room.questionsPerRound}
-        isCorrect={isCorrect}
+        totalQuestions={state.context.room.questionsPerRound}
+        isCorrect={state.context.isCorrect}
         correctAnswer={currentQuestion.options[currentQuestion.correctAnswer]}
         explanation={currentQuestion.explanation || ''}
-        leaderboard={leaderboard}
+        leaderboard={state.context.leaderboard}
         timer={timer}
       />
     );
@@ -344,7 +368,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   return (
     <QuestionScreen
       currentQuestion={currentQuestionIndex + 1}
-      totalQuestions={room.questionsPerRound}
+      totalQuestions={state.context.room.questionsPerRound}
       timer={timer}
       question={currentQuestion.question}
       topics={currentQuestion.topics}

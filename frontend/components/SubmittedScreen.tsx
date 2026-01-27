@@ -6,7 +6,6 @@ import {
   GameCard,
   GameHeader,
   CircularBadge,
-  GameTitle,
   FeedbackMessage,
   AnswerInput,
   LeaderboardSection,
