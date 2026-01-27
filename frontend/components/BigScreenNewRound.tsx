@@ -4,6 +4,8 @@ import {
   GameScreenContainer,
   GameTitle,
   GameTitleImage,
+  TopicsContainer,
+  TopicBadge,
 } from './styled/GameComponents';
 import {
   BigScreenCard,
@@ -17,6 +19,7 @@ interface BigScreenNewRoundProps {
   totalRounds: number;
   submittedCount: number;
   totalPlayers: number;
+  collectedTopics?: string[];
 }
 
 export default function BigScreenNewRound({
@@ -24,6 +27,7 @@ export default function BigScreenNewRound({
   totalRounds,
   submittedCount,
   totalPlayers,
+  collectedTopics = [],
 }: BigScreenNewRoundProps) {
   return (
     <GameScreenContainer>
@@ -46,37 +50,21 @@ export default function BigScreenNewRound({
           Players are submitting topics...
         </MutedText>
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: '1rem',
-          marginTop: '3rem'
-        }}>
-          {Array.from({ length: totalPlayers }).map((_, index) => (
-            <div
-              key={index}
-              style={{
-                width: '4rem',
-                height: '4rem',
-                borderRadius: '50%',
-                backgroundColor: index < submittedCount 
-                  ? 'rgba(34, 197, 94, 0.3)' 
-                  : 'rgba(255, 255, 255, 0.1)',
-                border: index < submittedCount 
-                  ? '3px solid rgb(34, 197, 94)' 
-                  : '3px solid rgba(255, 255, 255, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '2rem',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              {index < submittedCount ? '✓' : ''}
-            </div>
-          ))}
-        </div>
+        {/* Display collected topics */}
+        {collectedTopics && collectedTopics.length > 0 && (
+          <div style={{ marginBottom: '2rem' }}>
+            <MutedText style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'center' }}>
+              Topics submitted ({collectedTopics.length}):
+            </MutedText>
+            <TopicsContainer>
+              {collectedTopics.map((topic, index) => (
+                <TopicBadge key={index}>
+                  {topic}
+                </TopicBadge>
+              ))}
+            </TopicsContainer>
+          </div>
+        )}
 
         <MutedText style={{ fontSize: '1rem', textAlign: 'center', marginTop: '3rem' }}>
           Waiting for all players to submit their topics...

@@ -82,10 +82,20 @@ export default function StartGame({ roomId }: StartGameProps) {
   }, [roomId]);
 
   // WebSocket connection for real-time updates
-  const handleWebSocketMessage = useCallback((message: { type: string; startedAt?: string }) => {
+  const handleWebSocketMessage = useCallback((message: { 
+    type: string; 
+    startedAt?: string;
+    submittedCount?: number;
+    totalPlayers?: number;
+  }) => {
     switch (message.type) {
       case 'player_joined':
         // Refresh room data to get updated players and topics
+        fetchRoom();
+        break;
+      
+      case 'topic_submitted':
+        // Refresh room data to get updated collected topics
         fetchRoom();
         break;
       
@@ -114,7 +124,6 @@ export default function StartGame({ roomId }: StartGameProps) {
   const handleCopyUrl = async () => {
     try {
       await navigator.clipboard.writeText(roomUrl);
-      alert('URL copied to clipboard!');
     } catch {
       alert('Failed to copy URL');
     }

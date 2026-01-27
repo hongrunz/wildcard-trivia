@@ -19,16 +19,23 @@ export function useBackgroundMusic(
   } = options;
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [isMuted, setIsMuted] = useState(() => {
-    // Load mute preference from localStorage
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('trivia-music-muted');
-      return saved === 'true';
-    }
-    return false;
-  });
+  // Initialize to false to avoid hydration mismatch (server always renders false)
+  // We'll load from localStorage in useEffect after mount
+  const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load mute preference from localStorage after mount (client-side only)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('trivia-music-muted');
+      if (saved === 'true') {
+        setTimeout(() => {
+          setIsMuted(true);
+        }, 0);
+      }
+    }
+  }, []);
 
   // Initialize audio element
   useEffect(() => {

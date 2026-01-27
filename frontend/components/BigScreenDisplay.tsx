@@ -37,6 +37,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   
   // Local state for topic submission tracking (not part of game state machine)
   const [topicSubmissionCount, setTopicSubmissionCount] = useState(0);
+  const [collectedTopics, setCollectedTopics] = useState<string[]>([]);
 
   // Helper function to map leaderboard data to UI format
   const mapLeaderboardData = useCallback((
@@ -160,12 +161,21 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reset collected topics when entering newRound state
+  useEffect(() => {
+    if (state.value === 'newRound') {
+      setCollectedTopics([]);
+      setTopicSubmissionCount(0);
+    }
+  }, [state.value]);
+
   // WebSocket message handler
   const handleWebSocketMessage = useCallback(async (message: {
     type: string;
     startedAt?: string;
     currentRound?: number;
     submittedCount?: number;
+    topic?: string;
     topics?: string[];
     nextRound?: number;
     player?: {
@@ -189,6 +199,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
         }
       }
       setTopicSubmissionCount(0); // Reset submission count
+      setCollectedTopics([]); // Reset collected topics for new round
       return;
     }
     
@@ -202,6 +213,18 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
       if (message.submittedCount !== undefined) {
         setTopicSubmissionCount(message.submittedCount);
       }
+      // Add topic to collected topics if provided in message
+      if (message.topic) {
+        setCollectedTopics(prev => {
+          // Avoid duplicates
+          if (!prev.includes(message.topic!)) {
+            return [...prev, message.topic!];
+          }
+          return prev;
+        });
+      }
+      // Don't fetch room data here - it would return topics for current_round, not next_round
+      // We rely on WebSocket messages to accumulate topics for the next round
       return;
     }
 
@@ -245,7 +268,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   // Error state
   if (state.value === 'error' || state.context.error) {
     return (
-      <>
+      <>f
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
         <GameScreenContainer>
           <BigScreenCard>
@@ -309,6 +332,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
           totalRounds={state.context.room.numRounds}
           submittedCount={topicSubmissionCount}
           totalPlayers={state.context.room.players.length}
+          collectedTopics={collectedTopics}
         />
       </>
     );

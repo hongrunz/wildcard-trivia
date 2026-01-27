@@ -169,7 +169,10 @@ export const gameStateMachine = setup({
     },
 
     question: {
-      // Use dynamic timer based on timePerQuestion from Redis
+      // Reset isCorrect to false when entering a new question
+      entry: assign({
+        isCorrect: () => false,
+      }),
       invoke: {
         src: 'questionTimer',
         input: ({ context }) => context,
@@ -183,8 +186,9 @@ export const gameStateMachine = setup({
         },
         TIMER_EXPIRED: {
           target: 'submitted',
+          // Preserve the isCorrect value (will be false if no answer submitted, or the correct value if answer was submitted)
           actions: assign({
-            isCorrect: () => false,
+            isCorrect: ({ context }) => context.isCorrect,
           }),
         },
         ROOM_UPDATED: {

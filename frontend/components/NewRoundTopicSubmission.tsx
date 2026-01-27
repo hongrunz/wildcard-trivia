@@ -56,7 +56,7 @@ export default function NewRoundTopicSubmission({
           <form onSubmit={handleSubmit}>
             <Input
               type="text"
-              placeholder="Enter a topic (e.g., Space, Movies, History)"
+              placeholder="Enter a topic"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               disabled={isSubmitting}
