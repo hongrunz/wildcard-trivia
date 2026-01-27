@@ -233,7 +233,6 @@ export default function StartGame({ roomId }: StartGameProps) {
           {/* Main Game Card */}
           <FormCard>
             <GameContainer>
-
               {/* Big Screen Mode Notice */}
               {sessionMode === 'display' && (
                 <BigScreenNotice>

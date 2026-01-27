@@ -11,21 +11,38 @@ import { useBackgroundMusic } from '../lib/useBackgroundMusic';
 import { useGameTimerDisplay } from '../lib/useGameTimerDisplay';
 import { gameStateMachine, type LeaderboardEntry } from '../lib/gameStateMachine';
 import MusicControl from './MusicControl';
-import { GameScreenContainer, GameTitle, LeaderboardList, TopicsContainer, TopicBadge, GameTitleImage } from './styled/GameComponents';
+import { GameScreenContainer, GameTitle, LeaderboardList, TopicsContainer, TopicBadge, GameTitleImage, PlayerListTitle, PlayerListItem, PlayerListItemAvatar, PlayerListItemName, PlayerListContainer } from './styled/GameComponents';
 import {
   BigScreenCard,
   BigScreenHeader,
   BigScreenBadge,
   BigScreenQuestionText,
-  BigScreenOptionsContainer,
-  BigScreenOptionBox,
   BigScreenExplanation,
   BigScreenLeaderboardSection,
   BigScreenLeaderboardHeading,
   BigScreenLeaderboardItem,
   ErrorTitle,
+  BigScreenLayout,
+  GamePlayStatus,
+  BigScreenLeaderboardCard,
+  BigScreenQuestionCard,
+  BigScreenContainer,
+  BigScreenGameTitle,
+  BigScreenGameTitlePart,
+  TriviCommentaryCard,
+  TriviCommentaryCharacterContainer,
+  TriviCommentaryTextContainer,
+  TriviCommentaryTitle,
+  TriviCommentaryBody,
+  QuestionProgress,
+  BigScreenTopBar,
+  TimerBadge,
+  LeaderboardScore,
+  BigScreenRightContainer,
 } from './styled/BigScreenComponents';
+import { OptionsContainer, OptionButton, BigScreenOptionsContainer, BigScreenOptionButton } from './styled/OptionsContainer';
 import { MutedText } from './styled/StatusComponents';
+import { colors, typography } from './styled/theme';
 
 interface BigScreenDisplayProps {
   roomId: string;
@@ -91,6 +108,9 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     try {
       const roomData = await api.getRoom(roomId);
 
+      // Always try to fetch leaderboard, even if game hasn't started
+      fetchLeaderboard();
+
       if (roomData.status === 'started' && roomData.questions) {
         // Parse and set game start timestamp for timer synchronization
         if (roomData.startedAt) {
@@ -99,8 +119,6 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
             send({ type: 'GAME_LOADED', room: roomData, startedAt: startTime });
           }
         }
-        
-        fetchLeaderboard();
       } else if (roomData.status === 'finished') {
         send({ type: 'ROOM_UPDATED', room: roomData });
         await fetchLeaderboard();
@@ -256,11 +274,11 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     return (
       <>
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
+        <BigScreenContainer>
           <BigScreenCard>
             <GameTitle>Loading game...</GameTitle>
           </BigScreenCard>
-        </GameScreenContainer>
+        </BigScreenContainer>
       </>
     );
   }
@@ -270,11 +288,11 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     return (
       <>f
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
+        <BigScreenContainer>
           <BigScreenCard>
             <ErrorTitle>Error: {state.context.error}</ErrorTitle>
           </BigScreenCard>
-        </GameScreenContainer>
+        </BigScreenContainer>
       </>
     );
   }
@@ -284,11 +302,11 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     return (
       <>
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
+        <BigScreenContainer>
           <BigScreenCard>
             <GameTitle>Waiting for game to start...</GameTitle>
           </BigScreenCard>
-        </GameScreenContainer>
+        </BigScreenContainer>
       </>
     );
   }
@@ -298,11 +316,11 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     return (
       <>
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
+        <BigScreenContainer>
           <BigScreenCard>
             <GameTitle>Synchronizing with server...</GameTitle>
           </BigScreenCard>
-        </GameScreenContainer>
+        </BigScreenContainer>
       </>
     );
   }
@@ -359,11 +377,11 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     return (
       <>
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
+        <BigScreenContainer>
           <BigScreenCard>
             <GameTitle>Loading question {currentQuestionIndex + 1}...</GameTitle>
           </BigScreenCard>
-        </GameScreenContainer>
+        </BigScreenContainer>
       </>
     );
   }
@@ -425,94 +443,120 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     );
   }
 
-  // Answer reveal with leaderboard (8-second review period)
+
+  // Active question display
   return (
     <>
       <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-      <GameScreenContainer>
-        <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
-        <BigScreenCard>
-          {/* Header with question number and timer */}
-          <BigScreenHeader>
-            <BigScreenBadge>
-              {currentQuestionIndex + 1}/{state.context.room.questionsPerRound}
-            </BigScreenBadge>
-            <BigScreenBadge>
-              Review: {timer}s
-            </BigScreenBadge>
-          </BigScreenHeader>
+      <BigScreenContainer>
+        <BigScreenLayout>
+          {/* Left Side - Leaderboard */}
+          <GamePlayStatus>
+            {/* Game Title */}
+            <BigScreenGameTitle>
+              <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+            </BigScreenGameTitle>
 
-          {/* Title */}
-          <GameTitle>Answer Revealed!</GameTitle>
+            {/* Trivi Commentary Card */}
+            <TriviCommentaryCard>
+              <TriviCommentaryCharacterContainer>
+                <img src="/assets/Trivi_big_smile.svg" alt="Trivi character" />
+              </TriviCommentaryCharacterContainer>
+              <TriviCommentaryTextContainer>
+                <TriviCommentaryTitle>Awesome!</TriviCommentaryTitle>
+                <TriviCommentaryBody>
+                  Placeholder text for commentary
+                </TriviCommentaryBody>
+              </TriviCommentaryTextContainer>
+            </TriviCommentaryCard>
 
-          {/* Display topics */}
-          {currentQuestion.topics && currentQuestion.topics.length > 0 && (
-            <div style={{ marginBottom: '1.5rem' }}>
-              <MutedText style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'center' }}>
-                Topics:
-              </MutedText>
-              <TopicsContainer>
-                {currentQuestion.topics.map((topic, index) => (
-                  <TopicBadge key={index}>
-                    {topic}
-                  </TopicBadge>
-                ))}
-              </TopicsContainer>
-            </div>
-          )}
+            {/* Leaderboard Card */}
+            <BigScreenLeaderboardCard>
+              <PlayerListTitle>Leaderboard</PlayerListTitle>
+              <PlayerListContainer>
+                {leaderboard.length > 0 ? (
+                  leaderboard.map((entry) => {
+                    // Generate a consistent avatar based on player ID
+                    const avatarCount = 10;
+                    const avatarIndex = (entry.playerId.charCodeAt(0) % avatarCount) + 1;
+                    const avatarSrc = `/assets/avatars/avatar_${avatarIndex}.svg`;
+                    
+                    return (
+                      <PlayerListItem key={entry.playerId}>
+                        <PlayerListItemAvatar $avatarSrc={avatarSrc}>
+                          {entry.playerName.charAt(0).toUpperCase()}
+                        </PlayerListItemAvatar>
+                        <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <PlayerListItemName>
+                            #{entry.rank} {entry.playerName}
+                          </PlayerListItemName>
+                          <LeaderboardScore>{entry.points}</LeaderboardScore>
+                        </div>
+                      </PlayerListItem>
+                    );
+                  })
+                ) : (
+                  <MutedText style={{ textAlign: 'center', padding: '2rem 0' }}>
+                    No scores yet
+                  </MutedText>
+                )}
+              </PlayerListContainer>
+            </BigScreenLeaderboardCard>
+          </GamePlayStatus>
 
-          {/* Question text */}
-          <BigScreenQuestionText>
-            {currentQuestion.question}
-          </BigScreenQuestionText>
+          {/* Right Side - Question Area */}
+          <BigScreenRightContainer>
+            {/* Top bar with round and timer */}
+            <BigScreenTopBar>
+              <span>Round {currentRound} of {totalRounds}</span>
+              <TimerBadge>{timer !== undefined ? `${timer}s` : '--'}</TimerBadge>
+            </BigScreenTopBar>
 
-          {/* Options with answer revealed */}
-          <BigScreenOptionsContainer>
-            {currentQuestion.options.map((option, index) => (
-              <BigScreenOptionBox 
-                key={index}
-                $showAnswer={true}
-                $isCorrect={index === currentQuestion.correctAnswer}
-              >
-                {option}
-              </BigScreenOptionBox>
-            ))}
-          </BigScreenOptionsContainer>
+            {/* Question Card */}
+            <BigScreenQuestionCard>
+              {/* Question progress */}
+              <QuestionProgress>
+                Question {currentQuestionIndex + 1}/{room.questionsPerRound}
+              </QuestionProgress>
 
-          {/* Show explanation */}
-          {currentQuestion.explanation && (
-            <BigScreenExplanation>
-              <strong>Explanation:</strong> {currentQuestion.explanation}
-            </BigScreenExplanation>
-          )}
+              {/* Question text */}
+              <BigScreenQuestionText>
+                {currentQuestion.question}
+              </BigScreenQuestionText>
 
-          {/* Leaderboard */}
-          {state.context.leaderboard.length > 0 && (
-            <BigScreenLeaderboardSection>
-              <BigScreenLeaderboardHeading>Leaderboard:</BigScreenLeaderboardHeading>
-              <LeaderboardList>
-                {state.context.leaderboard.slice(0, 5).map((entry) => (
-                  <BigScreenLeaderboardItem key={entry.playerId}>
-                    <div>
-                      <span>#{entry.rank} {entry.playerName}</span>
-                      <span>... {entry.points} pts</span>
-                    </div>
-                    {entry.topicScore && Object.keys(entry.topicScore).length > 0 && (
-                      <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        {Object.entries(entry.topicScore).map(([topic, score]) => (
-                          <TopicBadge key={topic} style={{ fontSize: '0.75rem', padding: '0.25rem 0.75rem' }}>
-                            {topic}: {score}
-                          </TopicBadge>
-                        ))}
-                      </div>
-                    )}
-                  </BigScreenLeaderboardItem>
-                ))}
-              </LeaderboardList>
-            </BigScreenLeaderboardSection>
-          )}
-        </BigScreenCard>
-      </GameScreenContainer>
+              {/* Options - Vertical stack */}
+              <BigScreenOptionsContainer>
+                {currentQuestion.options.map((option, index) => {
+                  const showAnswer = timer !== undefined && timer <= 0;
+                  const isCorrect = index === currentQuestion.correctAnswer;
+                  return (
+                    <BigScreenOptionButton
+                      key={index}
+                      disabled
+                      style={{
+                        backgroundColor: showAnswer && isCorrect ? colors.green[500] : colors.surface,
+                        color: showAnswer && isCorrect ? colors.surface : colors.typeMain,
+                        cursor: 'default',
+                        textAlign: 'center',
+                        border: `1px solid ${colors.border}`,
+                      }}
+                    >
+                      {option}
+                    </BigScreenOptionButton>
+                  );
+                })}
+              </BigScreenOptionsContainer>
+
+              {/* Show explanation after time expires */}
+              {timer !== undefined && timer <= 0 && currentQuestion.explanation && (
+                <BigScreenExplanation>
+                  <strong>Explanation:</strong> {currentQuestion.explanation}
+                </BigScreenExplanation>
+              )}
+            </BigScreenQuestionCard>
+          </BigScreenRightContainer>
+        </BigScreenLayout>
+      </BigScreenContainer>
     </>
   );
 }

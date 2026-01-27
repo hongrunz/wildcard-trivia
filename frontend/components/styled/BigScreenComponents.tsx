@@ -15,7 +15,6 @@ export const BigScreenCard = styled.div`
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 600px;
 
   @media (max-width: 1024px) {
     max-width: 60rem;
@@ -32,7 +31,7 @@ export const BigScreenHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
 `;
 
 export const BigScreenBadge = styled.div`
@@ -56,17 +55,17 @@ export const BigScreenBadge = styled.div`
   }
 `;
 
-export const BigScreenQuestionText = styled.p`
-  font-family: ${typography.presets.bigScreenQuestion.fontFamily};
-  font-size: ${typography.presets.bigScreenQuestion.fontSize};
-  font-weight: ${typography.presets.bigScreenQuestion.fontWeight};
-  line-height: ${typography.presets.bigScreenQuestion.lineHeight};
+export const BigScreenQuestionText = styled.h1`
+  font-family: ${typography.presets.h1.fontFamily};
+  font-size: ${typography.presets.h1.fontSize};
+  font-weight: ${typography.presets.h1.fontWeight};
+  line-height: ${typography.presets.h1.lineHeight};
   color: ${colors.typeMain};
   margin-bottom: 3rem;
   text-align: center;
 
   @media (max-width: 1024px) {
-    font-size: ${typography.fontSize.display2xl};
+    font-size: ${typography.fontSize.displaymd};
     margin-bottom: 2rem;
   }
 
@@ -93,7 +92,7 @@ export const BigScreenOptionBox = styled.div<{ $isCorrect?: boolean; $showAnswer
   width: 100%;
   padding: 2.5rem;
   border: 2px solid ${colors.border};
-  border-radius: 0.5rem;
+  border-radius: 40px;
   background-color: ${props => 
     props.$showAnswer && props.$isCorrect ? colors.green[500] : colors.surface};
   color: ${props => 
@@ -117,19 +116,19 @@ export const BigScreenOptionBox = styled.div<{ $isCorrect?: boolean; $showAnswer
 `;
 
 export const BigScreenExplanation = styled.div`
-  padding: 2rem;
+  
   background-color: ${colors.surface};
   border-radius: 0.5rem;
   margin-bottom: 2rem;
   font-family: ${typography.fontFamily.dmSans};
-  font-size: ${typography.fontSize.displaymd};
+  font-size: ${typography.fontSize.base};
   font-weight: ${typography.fontWeight.normal};
   line-height: ${typography.lineHeight.normal};
   color: ${colors.typeMain};
-  border: 1px solid ${colors.border};
+  
 
   @media (max-width: 768px) {
-    padding: 1rem;
+    
     font-size: ${typography.fontSize.base};
   }
 `;
@@ -177,4 +176,238 @@ export const ErrorTitle = styled.h1`
   color: #ef4444;
   text-align: center;
   margin: 0 0 2rem 0;
+`;
+
+// Two-column layout for big screen
+export const BigScreenLayout = styled.div`
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  align-items: stretch;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    height: auto;
+  }
+`;
+
+// Game play status container (left side with commentary and leaderboard)
+export const GamePlayStatus = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 60%;
+  padding: 2rem;
+  overflow-y: auto;
+
+  @media (max-width: 768px) {
+    width: 100%;
+  }
+`;
+
+// Right side container for question area
+export const BigScreenRightContainer = styled.div`
+  width: 40%;
+  min-height: 100vh;
+  background-color: ${colors.bgContrast};
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 40px 0px 0px 40px;
+
+  @media (max-width: 768px) {
+    width: 100%;
+    min-height: auto;
+  }
+`;
+
+// Big screen container with blue background
+export const BigScreenContainer = styled.div`
+  min-height: 100vh;
+  background-color: ${colors.primary};
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+`;
+
+// Game title for big screen (Wildcard in white, Trivia! in yellow)
+export const BigScreenGameTitle = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: ${typography.fontFamily.itim};
+  font-size: 3rem;
+  font-weight: ${typography.fontWeight.bold};
+  
+  @media (max-width: 768px) {
+    font-size: 2rem;
+  }
+`;
+
+export const BigScreenGameTitlePart = styled.span<{ $color: string }>`
+  color: ${props => props.$color};
+`;
+
+// Trivi commentary card
+export const TriviCommentaryCard = styled.div`
+  background-color:${colors.surface};
+  border-radius: 40px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  box-shadow: none;
+`;
+
+// Character container for Trivi commentary card
+export const TriviCommentaryCharacterContainer = styled.div`
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  min-height: 60px;
+  max-width: 250px;
+  max-height: 250px;
+  flex-shrink: 1;
+  width: 100%;
+  height: 100%;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  @media (max-width: 768px) {
+    width: 80px;
+    height: 80px;
+    
+  }
+`;
+
+// Text container for Trivi commentary card
+export const TriviCommentaryTextContainer = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+
+ 
+  
+  
+`;
+
+// Trivi commentary title text
+export const TriviCommentaryTitle = styled.div`
+  font-family: ${typography.presets.Commentary.fontFamily};
+  font-size: ${typography.presets.Commentary.fontSize};
+  font-weight: ${typography.presets.Commentary.fontWeight};
+  line-height: ${typography.presets.Commentary.lineHeight};
+  color: ${colors.typeMain};
+  width: fit-content;
+  height: fit-content;
+
+  
+`;
+
+// Trivi commentary body text
+export const TriviCommentaryBody = styled.div`
+  font-family: ${typography.presets.Commentary.fontFamily};
+  font-size: ${typography.presets.Commentary.fontSize};
+  font-weight: ${typography.presets.Commentary.fontWeight};
+  line-height: ${typography.presets.Commentary.lineHeight};
+  color: ${colors.typeMain};
+  width: fit-content;
+  height: fit-content;
+
+   @media (max-width: 768px) {
+    line-height: 1;
+  }
+
+  
+`;
+
+// Question progress text
+export const QuestionProgress = styled.div`
+  font-family: ${typography.fontFamily.dmSans};
+  font-size: ${typography.fontSize.sm};
+  color: ${colors.typeSecondary};
+  text-align: center;
+  margin-bottom: 1rem;
+`;
+
+// Top bar with round info and timer
+export const BigScreenTopBar = styled.div`
+  
+  top: 2rem;
+  right: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background-color: ${colors.bgContrast};
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  color: white;
+  font-family: ${typography.fontFamily.dmSans};
+  font-size: ${typography.fontSize.base};
+  font-weight: ${typography.fontWeight.semibold};
+  z-index: 10;
+  
+  @media (max-width: 768px) {
+    position: relative;
+    top: auto;
+    right: auto;
+    margin-bottom: 1rem;
+  }
+`;
+
+export const TimerBadge = styled.div`
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: ${typography.fontWeight.bold};
+`;
+
+// Leaderboard card for big screen (left side)
+export const BigScreenLeaderboardCard = styled.div`
+  background-color: ${colors.surface};
+  border-radius: 40px;
+  padding: 2rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid ${colors.border};
+
+ 
+  @media (max-width: 768px) {
+    max-width: 100%;
+    min-height: auto;
+  }
+`;
+
+// Leaderboard item with colored score
+export const LeaderboardScore = styled.span`
+  color: ${colors.typeAccent};
+  font-weight: ${typography.fontWeight.bold};
+  font-size: ${typography.fontSize.lg};
+`;
+
+// Question content card (right side)
+export const BigScreenQuestionCard = styled(BigScreenCard)`
+  flex: 1;
+  border-radius: 40px;
+  background-color: ${colors.surface};
 `;
