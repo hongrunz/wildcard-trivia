@@ -59,7 +59,6 @@ export default function QuestionScreen({
           <CircularBadge>{currentQuestion}/{totalQuestions}</CircularBadge>
           {mounted && timer !== undefined && <CircularBadge>{timer}</CircularBadge>}
         </GameHeader>
-        <GameTitle>Wildcard Trivia!</GameTitle>
         
         {/* Display topics */}
         {safeTopics.length > 0 && (

@@ -7,7 +7,7 @@
 
 export const colors = {
   // Primary Colors
-  primary: '#6ABBFE',
+  primary: '#43A8FB',
   border: '#469BE2',
   bgContrast: '#0E6AB6',
   primarySelected: '#123858',
@@ -209,13 +209,13 @@ export const typography = {
     // Big Screen Display
     bigScreenQuestion: {
       fontFamily: 'var(--font-dm-sans), sans-serif',
-      fontSize: '3rem',      // 48px (desktop), responsive in component
+      fontSize: '2rem',      // 48px (desktop), responsive in component
       fontWeight: 600,
       lineHeight: 1.3,
     },
     bigScreenOption: {
       fontFamily: 'var(--font-dm-sans), sans-serif',
-      fontSize: '2rem',      // 32px (desktop), responsive in component
+      fontSize: '1.2rem',      // 32px (desktop), responsive in component
       fontWeight: 600,
       lineHeight: 1.4,
     },

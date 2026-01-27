@@ -76,8 +76,6 @@ export default function CreateGame() {
     <PageContainer>
       <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
       <FormCard>
-        <Title>Wildcard Trivia!</Title>
-        
         {/* Show device mode info */}
         <InfoBox $variant={deviceType}>
           {deviceType === 'web' ? (
