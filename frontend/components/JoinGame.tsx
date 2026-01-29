@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   PageContainer,
@@ -13,8 +13,10 @@ import {
   ButtonContainerCenter,
 } from './styled/FormComponents';
 import { ErrorText } from './styled/ErrorComponents';
-import { GameTitleImage } from './styled/GameComponents';
-import { api, tokenStorage } from '../lib/api';
+import { GameTitleImage, TopicsSection, TopicsContainer, TopicBadge } from './styled/GameComponents';
+import { MutedText } from './styled/StatusComponents';
+import { api, tokenStorage, type RoomResponse } from '../lib/api';
+import { useWebSocket } from '../lib/useWebSocket';
 
 export default function JoinGame() {
   const router = useRouter();
@@ -24,6 +26,36 @@ export default function JoinGame() {
   const [topic, setTopic] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [room, setRoom] = useState<RoomResponse | null>(null);
+  const [isRoomLoading, setIsRoomLoading] = useState(false);
+
+  const fetchRoom = useCallback(async () => {
+    if (!roomId) return;
+    setIsRoomLoading(true);
+    try {
+      const roomData = await api.getRoom(roomId);
+      setRoom(roomData);
+    } catch {
+      // Non-blocking: joining can still work even if we can't fetch room details.
+      setRoom(null);
+    } finally {
+      setIsRoomLoading(false);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    void fetchRoom();
+  }, [fetchRoom]);
+
+  const handleWebSocketMessage = useCallback((message: { type: string }) => {
+    if (message.type === 'player_joined' || message.type === 'topic_submitted') {
+      void fetchRoom();
+    }
+  }, [fetchRoom]);
+
+  useWebSocket(roomId, {
+    onMessage: handleWebSocketMessage,
+  });
 
   const handleJoin = async () => {
     if (!guestName.trim()) {
@@ -62,6 +94,27 @@ export default function JoinGame() {
     <PageContainer>
       <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
       <FormCard>
+        {roomId && (
+          <TopicsSection style={{ marginBottom: '1.5rem' }}>
+            <MutedText style={{ marginBottom: '0.5rem', textAlign: 'center' }}>
+              {isRoomLoading ? 'Loading topics…' : `Topics so far (${room?.collectedTopics?.length ?? 0})`}
+            </MutedText>
+            {room?.collectedTopics && room.collectedTopics.length > 0 ? (
+              <TopicsContainer>
+                {room.collectedTopics.map((t) => (
+                  <TopicBadge key={t}>
+                    {t}
+                  </TopicBadge>
+                ))}
+              </TopicsContainer>
+            ) : (
+              <MutedText style={{ textAlign: 'center' }}>
+                No topics yet — be the first!
+              </MutedText>
+            )}
+          </TopicsSection>
+        )}
+
         <FormGroup>
           <FieldContainer>
             <Label htmlFor="guestName">Your Name:</Label>

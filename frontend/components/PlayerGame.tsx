@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useMachine } from '@xstate/react';
 import { useRouter } from 'next/navigation';
 import QuestionScreen from './QuestionScreen';
@@ -12,6 +12,8 @@ import { api, tokenStorage, LeaderboardResponse, RoomResponse } from '../lib/api
 import { useWebSocket } from '../lib/useWebSocket';
 import { useGameTimerDisplay } from '../lib/useGameTimerDisplay';
 import { gameStateMachine, type LeaderboardEntry } from '../lib/gameStateMachine';
+import { useBackgroundMusic } from '../lib/useBackgroundMusic';
+import MusicControl from './MusicControl';
 import { 
   PageContainer, 
   FormCard, 
@@ -31,9 +33,23 @@ interface PlayerGameProps {
 export default function PlayerGame({ roomId }: PlayerGameProps) {
   const router = useRouter();
   const playerToken = tokenStorage.getPlayerToken(roomId);
+  const hostToken = tokenStorage.getHostToken(roomId);
   
+  // Check if this player is also the host (has both tokens)
+  const isHost = !!hostToken;
+
+  // Background music (only for host)
+  const { isMuted, toggleMute, isLoaded } = useBackgroundMusic('/background-music.mp3', {
+    autoPlay: isHost, // Only auto-play if this player is the host
+    loop: true,
+    volume: 0.3,
+  });
+
   // Use XState machine for formal state management
   const [state, send] = useMachine(gameStateMachine);
+
+  // Live topic list for "newRound" screen (built from websocket events)
+  const [newRoundTopics, setNewRoundTopics] = useState<string[]>([]);
 
   // Check if player has a valid token - if not, show error immediately
   const hasNoToken = !playerToken;
@@ -177,6 +193,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     type: string;
     startedAt?: string;
     currentRound?: number;
+    topic?: string;
+    topics?: string[];
     player?: {
       playerId: string;
       playerName: string;
@@ -197,6 +215,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
           send({ type: 'ROUND_CHANGED', startedAt: startTime, room: roomData });
         }
       }
+      // Reset topic list once we move into the next round questions
+      setNewRoundTopics([]);
       return;
     }
     
@@ -204,11 +224,27 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       fetchLeaderboard();
       return;
     }
+
+    if (message.type === 'topic_submitted') {
+      // During the "newRound" phase, show topics as they come in for everyone.
+      // Prefer the full topic list if provided; otherwise append the single topic.
+      if (state.value === 'newRound') {
+        if (Array.isArray(message.topics) && message.topics.length > 0) {
+          setNewRoundTopics(Array.from(new Set(message.topics.map((t) => t.trim()).filter(Boolean))));
+        } else if (message.topic) {
+          const t = message.topic.trim();
+          if (t) {
+            setNewRoundTopics((prev) => (prev.includes(t) ? prev : [...prev, t]));
+          }
+        }
+      }
+      return;
+    }
     
     if (message.type === 'player_joined' && message.player) {
       send({ type: 'PLAYER_JOINED', player: message.player });
     }
-  }, [fetchRoom, fetchLeaderboard, roomId, send]);
+  }, [fetchRoom, fetchLeaderboard, roomId, send, state.value]);
 
   // WebSocket connection
   useWebSocket(roomId, {
@@ -263,24 +299,24 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   if (hasNoToken) {
     return (
       <PageContainer>
-        <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
-        <FormCard>
-          <Title>Access Denied</Title>
-          <ErrorBox>
-            <ErrorIcon>🚫</ErrorIcon>
-            <ErrorHeading>You must join the game first!</ErrorHeading>
-            <ErrorMessage>
-              You don&apos;t have permission to access this game. 
-              Please join the game using your name.
-            </ErrorMessage>
-          </ErrorBox>
-          <ButtonContainerCenter>
-            <ButtonPrimary onClick={handleJoinRedirect}>
-              Join Game
-            </ButtonPrimary>
-          </ButtonContainerCenter>
-        </FormCard>
-      </PageContainer>
+          <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+          <FormCard>
+            <Title>Access Denied</Title>
+            <ErrorBox>
+              <ErrorIcon>🚫</ErrorIcon>
+              <ErrorHeading>You must join the game first!</ErrorHeading>
+              <ErrorMessage>
+                You don&apos;t have permission to access this game. 
+                Please join the game using your name.
+              </ErrorMessage>
+            </ErrorBox>
+            <ButtonContainerCenter>
+              <ButtonPrimary onClick={handleJoinRedirect}>
+                Join Game
+              </ButtonPrimary>
+            </ButtonContainerCenter>
+          </FormCard>
+        </PageContainer>
     );
   }
 
@@ -307,34 +343,44 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   // Round finished state (show between rounds)
   if (state.value === 'roundFinished') {
     return (
-      <RoundFinished
-        currentRound={state.context.room.currentRound}
-        totalRounds={state.context.room.numRounds}
-        leaderboard={state.context.leaderboard}
-        timer={timer}
-      />
+      <>
+        {isHost && <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />}
+        <RoundFinished
+          currentRound={state.context.room.currentRound}
+          totalRounds={state.context.room.numRounds}
+          leaderboard={state.context.leaderboard}
+          timer={timer}
+        />
+      </>
     );
   }
 
   // New round topic submission state
   if (state.value === 'newRound') {
     return (
-      <NewRoundTopicSubmission
-        currentRound={state.context.room.currentRound + 1}
-        totalRounds={state.context.room.numRounds}
-        onSubmitTopic={handleSubmitTopic}
-      />
+      <>
+        {isHost && <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />}
+        <NewRoundTopicSubmission
+          currentRound={state.context.room.currentRound + 1}
+          totalRounds={state.context.room.numRounds}
+          onSubmitTopic={handleSubmitTopic}
+          collectedTopics={newRoundTopics}
+        />
+      </>
     );
   }
 
   // Game finished state
   if (state.value === 'finished') {
     return (
-      <GameFinished
-        totalQuestions={state.context.room.questionsPerRound}
-        finalScore={state.context.score}
-        leaderboard={state.context.leaderboard}
-      />
+      <>
+        {isHost && <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />}
+        <GameFinished
+          totalQuestions={state.context.room.questionsPerRound}
+          finalScore={state.context.score}
+          leaderboard={state.context.leaderboard}
+        />
+      </>
     );
   }
 
@@ -352,28 +398,34 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   // Answer submitted state (show results for 8 seconds)
   if (state.value === 'submitted') {
     return (
-      <SubmittedScreen
-        currentQuestion={currentQuestionIndex + 1}
-        totalQuestions={state.context.room.questionsPerRound}
-        isCorrect={state.context.isCorrect}
-        correctAnswer={currentQuestion.options[currentQuestion.correctAnswer]}
-        explanation={currentQuestion.explanation || ''}
-        leaderboard={state.context.leaderboard}
-        timer={timer}
-      />
+      <>
+        {isHost && <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />}
+        <SubmittedScreen
+          currentQuestion={currentQuestionIndex + 1}
+          totalQuestions={state.context.room.questionsPerRound}
+          isCorrect={state.context.isCorrect}
+          correctAnswer={currentQuestion.options[currentQuestion.correctAnswer]}
+          explanation={currentQuestion.explanation || ''}
+          leaderboard={state.context.leaderboard}
+          timer={timer}
+        />
+      </>
     );
   }
 
   // Active question state
   return (
-    <QuestionScreen
-      currentQuestion={currentQuestionIndex + 1}
-      totalQuestions={state.context.room.questionsPerRound}
-      timer={timer}
-      question={currentQuestion.question}
-      topics={currentQuestion.topics}
-      options={currentQuestion.options}
-      onSubmit={handleSubmitAnswer}
-    />
+    <>
+      {isHost && <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />}
+      <QuestionScreen
+        currentQuestion={currentQuestionIndex + 1}
+        totalQuestions={state.context.room.questionsPerRound}
+        timer={timer}
+        question={currentQuestion.question}
+        topics={currentQuestion.topics}
+        options={currentQuestion.options}
+        onSubmit={handleSubmitAnswer}
+      />
+    </>
   );
 }

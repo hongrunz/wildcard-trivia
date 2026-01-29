@@ -524,6 +524,7 @@ async def submit_topic(
             "playerId": str(player.player_id),
             "playerName": player.player_name,
             "topic": topic,
+            "topics": topics,
             "submittedCount": submitted_count,
             "totalPlayers": total_players
         })

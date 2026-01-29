@@ -6,6 +6,9 @@ import {
   GameCard,
   GameTitle,
   GameTitleImage,
+  TopicsSection,
+  TopicsContainer,
+  TopicBadge,
 } from './styled/GameComponents';
 import { MutedText } from './styled/StatusComponents';
 import { Input } from './styled/FormComponents';
@@ -15,12 +18,14 @@ interface NewRoundTopicSubmissionProps {
   currentRound: number;
   totalRounds: number;
   onSubmitTopic: (topic: string) => Promise<void>;
+  collectedTopics?: string[];
 }
 
 export default function NewRoundTopicSubmission({
   currentRound,
   totalRounds,
   onSubmitTopic,
+  collectedTopics = [],
 }: NewRoundTopicSubmissionProps) {
   const [topic, setTopic] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,6 +56,21 @@ export default function NewRoundTopicSubmission({
         <MutedText style={{ fontSize: '1.2rem', textAlign: 'center', marginBottom: '2rem' }}>
           Submit a new topic for the next round!
         </MutedText>
+
+        {collectedTopics.length > 0 && (
+          <TopicsSection style={{ marginBottom: '1.5rem' }}>
+            <MutedText style={{ marginBottom: '0.5rem', textAlign: 'center' }}>
+              Topics submitted so far ({collectedTopics.length})
+            </MutedText>
+            <TopicsContainer>
+              {collectedTopics.map((t) => (
+                <TopicBadge key={t}>
+                  {t}
+                </TopicBadge>
+              ))}
+            </TopicsContainer>
+          </TopicsSection>
+        )}
 
         {!hasSubmitted ? (
           <form onSubmit={handleSubmit}>
