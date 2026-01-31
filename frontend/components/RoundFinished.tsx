@@ -1,7 +1,9 @@
 'use client';
 
+import PlayerHeader from './PlayerHeader';
 import {
   GameScreenContainer,
+  GameScreenContent,
   GameCard,
   GameTitle,
   LeaderboardSection,
@@ -9,7 +11,6 @@ import {
   LeaderboardList,
   LeaderboardItem,
   TopicBadge,
-  GameTitleImage,
 } from './styled/GameComponents';
 import { MutedText } from './styled/StatusComponents';
 
@@ -41,7 +42,8 @@ export default function RoundFinished({
 
   return (
     <GameScreenContainer>
-      <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+      <PlayerHeader />
+      <GameScreenContent>
       <GameCard>
         <GameTitle>Round {currentRound} Complete! 🎊</GameTitle>
         
@@ -61,7 +63,7 @@ export default function RoundFinished({
             borderRadius: '0.5rem',
             backgroundColor: 'rgba(255, 255, 255, 0)'
           }}>
-            Next round starts in: {timer}s
+             {timer}s
           </div>
         )}
 
@@ -118,6 +120,7 @@ export default function RoundFinished({
             : 'Preparing final results...'}
         </MutedText>
       </GameCard>
+      </GameScreenContent>
     </GameScreenContainer>
   );
 }

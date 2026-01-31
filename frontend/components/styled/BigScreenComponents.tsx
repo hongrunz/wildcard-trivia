@@ -64,7 +64,7 @@ export const BigScreenQuestionText = styled.h1`
   margin-bottom: 3rem;
   text-align: center;
 
-  @media (max-width: 1024px) {
+  @media (max-width: 1200px) {
     font-size: ${typography.fontSize.displaymd};
     margin-bottom: 2rem;
   }
@@ -77,13 +77,13 @@ export const BigScreenQuestionText = styled.h1`
 
 export const BigScreenOptionsContainer = styled.div`
   width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   margin: 0 0 3rem 0;
 
   @media (max-width: 768px) {
-    gap: 0.75rem;
+    gap: 0.5rem;
     margin: 0 0 1.5rem 0;
   }
 `;
@@ -92,7 +92,7 @@ export const BigScreenOptionBox = styled.div<{ $isCorrect?: boolean; $showAnswer
   width: 100%;
   padding: 2.5rem;
   border: 2px solid ${colors.border};
-  border-radius: 40px;
+  border-radius: 100px;
   background-color: ${props => 
     props.$showAnswer && props.$isCorrect ? colors.green[500] : colors.surface};
   color: ${props => 
@@ -200,6 +200,10 @@ export const GamePlayStatus = styled.div`
   padding: 2rem;
   overflow-y: auto;
 
+  @media (max-width: 1200px) {
+    width: 50%;
+  }
+
   @media (max-width: 768px) {
     width: 100%;
   }
@@ -217,6 +221,10 @@ export const BigScreenRightContainer = styled.div`
   align-items: center;
   justify-content: center;
   border-radius: 40px 0px 0px 40px;
+
+  @media (max-width: 1200px) {
+    width: 50%;
+  }
 
   @media (max-width: 768px) {
     width: 100%;
@@ -403,6 +411,16 @@ export const LeaderboardScore = styled.span`
   color: ${colors.typeAccent};
   font-weight: ${typography.fontWeight.bold};
   font-size: ${typography.fontSize.lg};
+`;
+
+// Body text for card content (matches theme body preset)
+export const BigScreenBodyText = styled.p`
+  font-family: ${typography.presets.body.fontFamily};
+  font-size: ${typography.presets.body.fontSize};
+  font-weight: ${typography.presets.body.fontWeight};
+  line-height: ${typography.presets.body.lineHeight};
+  color: ${colors.typeMain};
+  margin: 0;
 `;
 
 // Question content card (right side)

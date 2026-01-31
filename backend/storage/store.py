@@ -57,6 +57,11 @@ def _room_topics_key(room_id: UUID, round: int) -> str:
     return f"room:{room_id}:{round}:topics"
 
 
+def _room_question_answered_key(room_id: UUID, question_id: str) -> str:
+    """Get Redis key for set of player IDs who have answered this question"""
+    return f"room:{room_id}:q:{question_id}:answered"
+
+
 class RoomStore:
     """Store for room operations"""
 
@@ -478,3 +483,17 @@ class QuestionStore:
         questions.sort(key=lambda q: q.question_index)
         
         return questions
+
+    @staticmethod
+    def record_answer_and_check_all(room_id: UUID, question_id: str, player_id: UUID) -> bool:
+        """Record that a player answered the question. Returns True if all players in the room have now answered."""
+        r = get_redis_client()
+        key = _room_question_answered_key(room_id, question_id)
+        r.sadd(key, str(player_id))
+        answered_count = r.scard(key)
+        players = PlayerStore.get_players_by_room(room_id)
+        total_players = len(players)
+        # Require at least one player; if room reports 0 (edge case), treat as 1 so solo play still transitions
+        effective_total = max(1, total_players)
+        all_done = answered_count >= effective_total
+        return all_done

@@ -125,6 +125,7 @@ export const Button = styled.button`
   font-size: ${typography.presets.button.fontSize};
   font-weight: ${typography.presets.button.fontWeight};
   line-height: ${typography.presets.button.lineHeight};
+  text-align: center;
   cursor: pointer;
   transition: background-color 0.2s;
 

@@ -65,7 +65,7 @@ You'll deploy three components:
 REDIS_URL=${{Redis.REDIS_URL}}
 
 # Gemini AI Configuration
-GEMINI_MODEL_NAME=gemini-2.0-flash
+GEMINI_MODEL_NAME=gemini-3
 GEMINI_API_KEY=your-gemini-api-key-here
 
 # Frontend URL (we'll update this after deploying frontend)
@@ -164,7 +164,7 @@ Once all services show "Active" status:
 ### Backend Service
 ```bash
 REDIS_URL=${{Redis.REDIS_URL}}              # Reference to Redis service
-GEMINI_MODEL_NAME=gemini-2.0-flash          # AI model name
+GEMINI_MODEL_NAME=gemini-3          # AI model name
 GEMINI_API_KEY=your-api-key                 # Your Gemini API key
 FRONTEND_URL=https://your-frontend-url.up.railway.app  # Frontend URL for CORS
 ```

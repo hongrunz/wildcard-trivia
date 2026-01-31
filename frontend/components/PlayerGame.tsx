@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useMachine } from '@xstate/react';
 import { useRouter } from 'next/navigation';
 import QuestionScreen from './QuestionScreen';
@@ -15,7 +15,6 @@ import { gameStateMachine, type LeaderboardEntry } from '../lib/gameStateMachine
 import { useBackgroundMusic } from '../lib/useBackgroundMusic';
 import MusicControl from './MusicControl';
 import { 
-  PageContainer, 
   FormCard, 
   Title, 
   ButtonPrimary,
@@ -23,7 +22,8 @@ import {
 } from './styled/FormComponents';
 import { ErrorBox, ErrorIcon, ErrorHeading, ErrorMessage } from './styled/ErrorComponents';
 import { CenteredMessage } from './styled/StatusComponents';
-import { GameTitleImage } from './styled/GameComponents';
+import PlayerHeader from './PlayerHeader';
+import { PlayerPageContainer, PlayerPageContent } from './styled/GameComponents';
 import { colors } from './styled/theme';
 
 interface PlayerGameProps {
@@ -47,6 +47,13 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
 
   // Use XState machine for formal state management
   const [state, send] = useMachine(gameStateMachine);
+
+  // Keep latest state in a ref so WebSocket handler always sees current state (avoids stale closure)
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Fallback: track which players have submitted for current question; transition when we've seen everyone (if backend never sends all_answers_submitted)
+  const submittedForQuestionRef = useRef<Map<string, Set<string>>>(new Map());
 
   // Live topic list for "newRound" screen (built from websocket events)
   const [newRoundTopics, setNewRoundTopics] = useState<string[]>([]);
@@ -142,44 +149,36 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   // Get current question index from state machine context
   const currentQuestionIndex = state.context.currentQuestionIndex;
 
-  // Game timer display hook (synchronized to server time)
+  // Game timer display hook (resets per question, always uses timePerQuestion)
   const { timer } = useGameTimerDisplay({
     room: state.context.room,
     gameState: state.value as 'question' | 'submitted' | 'roundFinished' | 'newRound' | 'finished',
-    gameStartedAt: state.context.gameStartedAt,
+    questionStartedAt: state.context.questionStartedAt,
+    reviewStartedAt: state.context.reviewStartedAt,
     currentQuestionIndex: state.context.currentQuestionIndex,
   });
 
-  // Send TIMER_EXPIRED when question timer runs out (synchronized to server time)
+  // Send TIMER_EXPIRED when question timer runs out (timePerQuestion seconds from when this question started)
   useEffect(() => {
-    if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.gameStartedAt) {
-      const calculateRemainingTime = () => {
+    if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.questionStartedAt) {
+      const timePerQuestionMs = state.context.room.timePerQuestion * 1000;
+      const check = () => {
         const now = new Date();
-        const elapsedMs = now.getTime() - state.context.gameStartedAt!.getTime();
-        const elapsedSeconds = Math.floor(elapsedMs / 1000);
-        
-        const REVIEW_TIME_SECONDS = 8;
-        const totalTimePerCycle = state.context.room!.timePerQuestion + REVIEW_TIME_SECONDS;
-        const timeInCurrentCycle = elapsedSeconds % totalTimePerCycle;
-        
-        if (timeInCurrentCycle < state.context.room!.timePerQuestion) {
-          return state.context.room!.timePerQuestion - timeInCurrentCycle;
-        }
-        return 0; // Already past question phase
-      };
-      
-      const remainingSeconds = calculateRemainingTime();
-      if (remainingSeconds > 0) {
-        const timeout = setTimeout(() => {
+        const elapsedMs = now.getTime() - state.context.questionStartedAt!.getTime();
+        const remainingMs = timePerQuestionMs - elapsedMs;
+        if (remainingMs <= 0) {
           send({ type: 'TIMER_EXPIRED' });
-        }, remainingSeconds * 1000);
-        return () => clearTimeout(timeout);
-      } else {
-        // Already past, send immediately
-        send({ type: 'TIMER_EXPIRED' });
-      }
+          return true;
+        }
+        return false;
+      };
+      if (check()) return;
+      const interval = setInterval(() => {
+        if (check()) clearInterval(interval);
+      }, 100);
+      return () => clearInterval(interval);
     }
-  }, [state.value, state.context.room?.timePerQuestion, state.context.gameStartedAt, send]);
+  }, [state.value, state.context.room?.timePerQuestion, state.context.questionStartedAt, send]);
 
   // Initial room fetch
   useEffect(() => {
@@ -193,6 +192,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     type: string;
     startedAt?: string;
     currentRound?: number;
+    questionId?: string;
+    playerId?: string;
     topic?: string;
     topics?: string[];
     player?: {
@@ -202,11 +203,13 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     };
   }) => {
     if (message.type === 'game_started') {
+      submittedForQuestionRef.current.clear();
       fetchRoom();
       return;
     }
     
     if (message.type === 'round_changed') {
+      submittedForQuestionRef.current.clear();
       // New round has started - update timer sync and fetch updated room data
       const roomData = await api.getRoom(roomId);
       if (message.startedAt) {
@@ -221,6 +224,38 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     }
     
     if (message.type === 'answer_submitted') {
+      const current = stateRef.current;
+      const room = current.context.room;
+      const questionId = message.questionId != null ? String(message.questionId) : '';
+      const playerId = message.playerId != null ? String(message.playerId) : '';
+      if (questionId && playerId && room?.players?.length) {
+        let set = submittedForQuestionRef.current.get(questionId);
+        if (!set) {
+          set = new Set();
+          submittedForQuestionRef.current.set(questionId, set);
+        }
+        set.add(playerId);
+        const inQuestion = current.value === 'question';
+        const currentQuestionId = room.questions?.[current.context.currentQuestionIndex]?.id;
+        const questionMatch = currentQuestionId != null && String(currentQuestionId) === questionId;
+        if (inQuestion && questionMatch && set.size >= room.players.length) {
+          submittedForQuestionRef.current.delete(questionId);
+          send({ type: 'ALL_ANSWERED' });
+        }
+      }
+      fetchLeaderboard();
+      return;
+    }
+
+    if (message.type === 'all_answers_submitted') {
+      const current = stateRef.current;
+      const inQuestion = current.value === 'question';
+      const currentQuestionId = current.context.room?.questions?.[current.context.currentQuestionIndex]?.id;
+      const messageQuestionId = message.questionId != null ? String(message.questionId) : '';
+      const questionMatch = !messageQuestionId || !currentQuestionId || messageQuestionId === String(currentQuestionId);
+      if (inQuestion && questionMatch) {
+        send({ type: 'ALL_ANSWERED' });
+      }
       fetchLeaderboard();
       return;
     }
@@ -244,7 +279,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     if (message.type === 'player_joined' && message.player) {
       send({ type: 'PLAYER_JOINED', player: message.player });
     }
-  }, [fetchRoom, fetchLeaderboard, roomId, send, state.value]);
+  }, [fetchRoom, fetchLeaderboard, roomId, send]);
 
   // WebSocket connection
   useWebSocket(roomId, {
@@ -262,7 +297,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       send({ 
         type: 'ANSWER_SUBMITTED', 
         isCorrect: response.isCorrect, 
-        score: response.currentScore 
+        score: response.currentScore,
+        selectedAnswer: answer,
       });
       
       fetchLeaderboard();
@@ -277,7 +313,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       send({ 
         type: 'ANSWER_SUBMITTED', 
         isCorrect: isAnswerCorrect, 
-        score: newScore 
+        score: newScore,
+        selectedAnswer: answer,
       });
     }
   };
@@ -298,8 +335,9 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   // No player token error - must join first
   if (hasNoToken) {
     return (
-      <PageContainer>
-          <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+      <PlayerPageContainer>
+          <PlayerHeader />
+          <PlayerPageContent>
           <FormCard>
             <Title>Access Denied</Title>
             <ErrorBox>
@@ -316,7 +354,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
               </ButtonPrimary>
             </ButtonContainerCenter>
           </FormCard>
-        </PageContainer>
+          </PlayerPageContent>
+        </PlayerPageContainer>
     );
   }
 
@@ -403,8 +442,13 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
         <SubmittedScreen
           currentQuestion={currentQuestionIndex + 1}
           totalQuestions={state.context.room.questionsPerRound}
+          currentRound={state.context.room.currentRound}
+          numRounds={state.context.room.numRounds}
           isCorrect={state.context.isCorrect}
-          correctAnswer={currentQuestion.options[currentQuestion.correctAnswer]}
+          question={currentQuestion.question}
+          options={currentQuestion.options}
+          correctAnswerIndex={currentQuestion.correctAnswer}
+          selectedAnswer={state.context.selectedAnswer}
           explanation={currentQuestion.explanation || ''}
           leaderboard={state.context.leaderboard}
           timer={timer}
@@ -420,6 +464,8 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       <QuestionScreen
         currentQuestion={currentQuestionIndex + 1}
         totalQuestions={state.context.room.questionsPerRound}
+        currentRound={state.context.room.currentRound}
+        numRounds={state.context.room.numRounds}
         timer={timer}
         question={currentQuestion.question}
         topics={currentQuestion.topics}

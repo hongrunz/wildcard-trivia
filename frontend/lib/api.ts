@@ -205,13 +205,16 @@ export const tokenStorage = {
 
   setPlayerToken(roomId: string, token: string): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(`playerToken_${roomId}`, token);
+      // Use sessionStorage so each tab/window has its own player identity.
+      // Otherwise two players in the same room (e.g. host + joiner in two tabs) would
+      // share one key and both end up with the same token → same playerId in broadcasts.
+      sessionStorage.setItem(`playerToken_${roomId}`, token);
     }
   },
 
   getPlayerToken(roomId: string): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(`playerToken_${roomId}`);
+      return sessionStorage.getItem(`playerToken_${roomId}`);
     }
     return null;
   },

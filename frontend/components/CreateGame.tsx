@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  PageContainer,
   FormCard,
   FormGroup,
   FieldContainer,
@@ -14,7 +13,8 @@ import {
 } from './styled/FormComponents';
 import { ErrorText } from './styled/ErrorComponents';
 import { InfoBox } from './styled/InfoComponents';
-import { GameTitleImage } from './styled/GameComponents';
+import PlayerHeader from './PlayerHeader';
+import { PlayerPageContainer, PlayerPageContent } from './styled/GameComponents';
 import { api, tokenStorage } from '../lib/api';
 import { getSessionMode, getDeviceType } from '../lib/deviceDetection';
 
@@ -25,15 +25,15 @@ const DEFAULT_NUM_ROUNDS = 3;
 export default function CreateGame() {
   const router = useRouter();
   const [hostName, setHostName] = useState('');
-  const [numQuestions, setNumQuestions] = useState(DEFAULT_NUM_QUESTIONS);
-  const [timeLimit, setTimeLimit] = useState(DEFAULT_TIME_LIMIT);
+  const [numQuestions, setNumQuestions] = useState(String(DEFAULT_NUM_QUESTIONS));
+  const [timeLimit, setTimeLimit] = useState(String(DEFAULT_TIME_LIMIT));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [topic, setTopic] = useState('');
   const [sessionMode, setSessionMode] = useState<'player' | 'display'>('player');
   const [deviceType, setDeviceType] = useState<'mobile' | 'web'>('web');
   const [isMounted, setIsMounted] = useState(false);
-  const [numRounds, setNumRounds] = useState(DEFAULT_NUM_ROUNDS);
+  const [numRounds, setNumRounds] = useState(String(DEFAULT_NUM_ROUNDS));
 
   // Detect device type and session mode after mount to avoid hydration mismatch
   useEffect(() => {
@@ -46,11 +46,27 @@ export default function CreateGame() {
     setIsMounted(true);
   }, []);
 
+  const parsedNumRounds = numRounds === '' ? NaN : parseInt(numRounds, 10);
+  const parsedNumQuestions = numQuestions === '' ? NaN : parseInt(numQuestions, 10);
+  const parsedTimeLimit = timeLimit === '' ? NaN : parseInt(timeLimit, 10);
+
+  const isNumRoundsValid = !Number.isNaN(parsedNumRounds) && parsedNumRounds >= 1;
+  const isNumQuestionsValid = !Number.isNaN(parsedNumQuestions) && parsedNumQuestions >= 1;
+  const isTimeLimitValid = !Number.isNaN(parsedTimeLimit) && parsedTimeLimit >= 1;
+
+  const isFormValid =
+    (sessionMode !== 'player' || !!hostName.trim()) &&
+    isNumRoundsValid &&
+    isNumQuestionsValid &&
+    isTimeLimitValid;
+
   const handleCreateRoom = async () => {
-    // For display mode (web), host name is optional - it's just a label
-    // For player mode (mobile), host name is required since they'll be playing
     if (sessionMode === 'player' && !hostName.trim()) {
       setError('Please enter your name');
+      return;
+    }
+    if (!isNumRoundsValid || !isNumQuestionsValid || !isTimeLimitValid) {
+      setError('Please fill in all numeric fields with valid values (rounds and questions ≥ 1, time limit ≥ 1).');
       return;
     }
 
@@ -59,12 +75,12 @@ export default function CreateGame() {
 
     try {
       const response = await api.createRoom({
-        name: hostName.trim() || 'Host', // Default name for display mode
-        topics: deviceType === 'mobile' ? [topic] : [], // Topics will be collected from players
-        questionsPerRound: numQuestions,
-        timePerQuestion: timeLimit,
-        sessionMode: sessionMode, // Pass session mode to backend
-        numRounds: numRounds,
+        name: hostName.trim() || 'Host',
+        topics: deviceType === 'mobile' ? [topic] : [],
+        questionsPerRound: parsedNumQuestions,
+        timePerQuestion: parsedTimeLimit,
+        sessionMode: sessionMode,
+        numRounds: parsedNumRounds,
       });
 
       // Store host token
@@ -79,8 +95,9 @@ export default function CreateGame() {
   };
 
   return (
-    <PageContainer>
-      <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+    <PlayerPageContainer>
+      <PlayerHeader />
+      <PlayerPageContent>
       <FormCard>
         {/* Show device mode info */}
         <InfoBox $variant={deviceType}>
@@ -129,8 +146,9 @@ export default function CreateGame() {
               id="numRounds"
               type="number"
               value={numRounds}
-              onChange={(e) => setNumRounds(parseInt(e.target.value) || DEFAULT_NUM_ROUNDS)}
-              min="1"
+              min={1}
+              onChange={(e) => setNumRounds(e.target.value)}
+              placeholder="e.g., 3"
             />
           </FieldContainer>
 
@@ -140,8 +158,9 @@ export default function CreateGame() {
               id="numQuestions"
               type="number"
               value={numQuestions}
-              onChange={(e) => setNumQuestions(parseInt(e.target.value) || DEFAULT_NUM_QUESTIONS)}
-              min="1"
+              min={1}
+              onChange={(e) => setNumQuestions(e.target.value)}
+              placeholder="e.g., 3"
             />
           </FieldContainer>
 
@@ -151,8 +170,9 @@ export default function CreateGame() {
               id="timeLimit"
               type="number"
               value={timeLimit}
-              onChange={(e) => setTimeLimit(parseInt(e.target.value) || DEFAULT_TIME_LIMIT)}
-              placeholder="e.g., 20 seconds"
+              min={1}
+              onChange={(e) => setTimeLimit(e.target.value)}
+              placeholder="e.g., 20"
             />
           </FieldContainer>
 
@@ -163,13 +183,14 @@ export default function CreateGame() {
         <ButtonContainer>
           <ButtonPrimary
             onClick={handleCreateRoom}
-            disabled={(sessionMode === 'player' && !hostName.trim()) || isLoading}
+            disabled={!isFormValid || isLoading}
           >
             {isLoading ? 'Creating...' : 'Create Room'}
           </ButtonPrimary>
         </ButtonContainer>
       </FormCard>
-    </PageContainer>
+      </PlayerPageContent>
+    </PlayerPageContainer>
   );
 }
 

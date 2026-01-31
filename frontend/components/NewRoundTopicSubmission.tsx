@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import PlayerHeader from './PlayerHeader';
 import {
   GameScreenContainer,
+  GameScreenContent,
   GameCard,
   GameTitle,
-  GameTitleImage,
   TopicsSection,
   TopicsContainer,
   TopicBadge,
@@ -49,9 +50,11 @@ export default function NewRoundTopicSubmission({
 
   return (
     <GameScreenContainer>
-      <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+      <PlayerHeader />
+      <GameScreenContent>
+        <GameTitle>Round {currentRound} of {totalRounds}</GameTitle>
       <GameCard>
-        <GameTitle>Round {currentRound} of {totalRounds} 🎯</GameTitle>
+        
         
         <MutedText style={{ fontSize: '1.2rem', textAlign: 'center', marginBottom: '2rem' }}>
           Submit a new topic for the next round!
@@ -113,6 +116,7 @@ export default function NewRoundTopicSubmission({
           </div>
         )}
       </GameCard>
+      </GameScreenContent>
     </GameScreenContainer>
   );
 }

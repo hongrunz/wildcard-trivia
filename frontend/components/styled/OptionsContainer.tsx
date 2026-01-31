@@ -4,13 +4,9 @@ import { colors, typography } from './theme';
 export const OptionsContainer = styled.div`
   width: 100%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.75rem;
   margin: 0 0 1.5rem 0;
-
-  @media (max-width: 420px) {
-    grid-template-columns: 1fr;
-  }
 `;
 
 // Vertical stack for big screen options
@@ -22,23 +18,23 @@ export const BigScreenOptionsContainer = styled.div`
   margin: 0 0 1.5rem 0;
 `;
 
-export const OptionButton = styled.button`
+export const OptionButton = styled.button<{ $selected?: boolean }>`
   width: 100%;
   padding: 0.75rem 0.75rem;
   border: 1px solid ${colors.border};
-  border-radius: 0.375rem;
-  background-color: ${colors.surface};
-  color: ${colors.typeMain};
+  border-radius: 100px;
+  background-color: ${props => props.$selected ? colors.primarySelected : colors.surface};
+  color: ${props => props.$selected ? colors.surface : colors.typeMain};
   font-family: ${typography.fontFamily.dmSans};
   font-size: ${typography.fontSize.sm};
   font-weight: ${typography.fontWeight.semibold};
   line-height: ${typography.lineHeight.normal};
-  text-align: left;
+  text-align: center;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.05s ease;
 
   &:hover:not(:disabled) {
-    background-color: ${colors.surfaceSecondary};
+    background-color: ${props => props.$selected ? colors.primarySelected : colors.surfaceSecondary};
     border-color: ${colors.border};
   }
 
@@ -63,7 +59,7 @@ export const BigScreenOptionButton = styled.button`
   width: 100%;
   padding: 0.75rem 0.75rem;
   border: 1px solid ${colors.border};
-  border-radius: 40px;
+  border-radius: 100px;
   background-color: ${colors.surface};
   color: ${colors.typeMain};
   font-family: ${typography.presets.bigScreenOption.fontFamily};

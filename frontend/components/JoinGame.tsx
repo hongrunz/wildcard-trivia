@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  PageContainer,
   FormCard,
   FormGroup,
   FieldContainer,
@@ -13,7 +12,8 @@ import {
   ButtonContainerCenter,
 } from './styled/FormComponents';
 import { ErrorText } from './styled/ErrorComponents';
-import { GameTitleImage, TopicsSection, TopicsContainer, TopicBadge } from './styled/GameComponents';
+import PlayerHeader from './PlayerHeader';
+import { PlayerPageContainer, PlayerPageContent, TopicsSection, TopicsContainer, TopicBadge } from './styled/GameComponents';
 import { MutedText } from './styled/StatusComponents';
 import { api, tokenStorage, type RoomResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
@@ -91,8 +91,9 @@ export default function JoinGame() {
   };
 
   return (
-    <PageContainer>
-      <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+    <PlayerPageContainer>
+      <PlayerHeader />
+      <PlayerPageContent>
       <FormCard>
         {roomId && (
           <TopicsSection style={{ marginBottom: '1.5rem' }}>
@@ -162,7 +163,8 @@ export default function JoinGame() {
           </ButtonLarge>
         </ButtonContainerCenter>
       </FormCard>
-    </PageContainer>
+      </PlayerPageContent>
+    </PlayerPageContainer>
   );
 }
 

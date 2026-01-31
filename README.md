@@ -137,8 +137,8 @@ REDIS_URL=redis://default:your-password@your-redis-host:6379
 
 **Additional Required Variables:**
 ```
-GEMINI_MODEL_NAME=gemini-2.0-flash
-GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL_NAME=gemini-3
+GEMINI_API_KEY=AIzaSyDbuDChv9_CPD9x-GQdJd0Ubk5w6FO08C8
 ```
 
 #### e. Run the Backend Server

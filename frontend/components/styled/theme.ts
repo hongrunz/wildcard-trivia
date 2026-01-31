@@ -19,6 +19,8 @@ export const colors = {
   // Surface Colors
   surface: '#FFFFFF',
   surfaceSecondary: 'rgba(72, 128, 175, 0.05)', // #4880AF with 5% opacity
+  surfaceDark: '#DAE6EF',
+
   
   // Text Colors
   typeMain: '#253441',
@@ -195,13 +197,13 @@ export const typography = {
     // Badges
     badge: {
       fontFamily: 'var(--font-dm-sans), sans-serif',
-      fontSize: '0.875rem',  // 14px
+      fontSize: '1rem',  // 14px
       fontWeight: 400,
       lineHeight: 1.2,
     },
     badgeLarge: {
       fontFamily: 'var(--font-dm-sans), sans-serif',
-      fontSize: '1rem',      // 16px
+      fontSize: '1.2rem',      // 16px
       fontWeight: 700,
       lineHeight: 1.2,
     },

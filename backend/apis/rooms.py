@@ -2,7 +2,7 @@
 Room API endpoints
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, Header
@@ -405,7 +405,16 @@ async def submit_answer(
             "questionId": request.questionId,
             "score": current_score
         })
-        
+
+        # If all players have answered, broadcast so clients can transition to answer revelation and start review timer
+        all_answered = QuestionStore.record_answer_and_check_all(room_uuid, request.questionId, player.player_id)
+        if all_answered:
+            await manager.broadcast_to_room(room_id, {
+                "type": "all_answers_submitted",
+                "questionId": request.questionId,
+                "reviewStartedAt": datetime.now(timezone.utc).isoformat(),
+            })
+
         return SubmitAnswerResponse(
             success=True,
             isCorrect=is_correct,

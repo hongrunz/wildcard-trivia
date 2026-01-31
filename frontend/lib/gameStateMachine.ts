@@ -1,4 +1,4 @@
-import { setup, assign, fromCallback } from 'xstate';
+import { setup, assign } from 'xstate';
 import { RoomResponse } from './api';
 
 export interface LeaderboardEntry {
@@ -14,7 +14,13 @@ export interface GameContext {
   currentRound: number;
   room: RoomResponse | null;
   gameStartedAt: Date | null;
+  /** When the current question was shown; used so the question timer always resets and uses timePerQuestion. */
+  questionStartedAt: Date | null;
+  /** When we transitioned to answer revelation (submitted); used to start the review timer. */
+  reviewStartedAt: Date | null;
   isCorrect: boolean;
+  /** The answer string the player submitted (for showing on answer-reveal screen). */
+  selectedAnswer: string | null;
   score: number;
   leaderboard: LeaderboardEntry[];
   error: string;
@@ -26,7 +32,7 @@ export type GameEvent =
   | { type: 'GAME_LOADED'; room: RoomResponse; startedAt: Date }
   | { type: 'ROOM_UPDATED'; room: RoomResponse }
   | { type: 'TIMER_EXPIRED' }
-  | { type: 'ANSWER_SUBMITTED'; isCorrect: boolean; score: number }
+  | { type: 'ANSWER_SUBMITTED'; isCorrect: boolean; score: number; selectedAnswer?: string }
   | { type: 'ROUND_FINISHED'; leaderboard: LeaderboardEntry[] }
   | { type: 'ROUND_BREAK_COMPLETE' }
   | { type: 'GAME_FINISHED'; leaderboard: LeaderboardEntry[]}
@@ -34,58 +40,13 @@ export type GameEvent =
   | { type: 'ROUND_CHANGED'; startedAt: Date; room: RoomResponse }
   | { type: 'LEADERBOARD_UPDATED'; leaderboard: LeaderboardEntry[] }
   | { type: 'PLAYER_JOINED'; player: { playerId: string; playerName: string; joinedAt: string } }
+  | { type: 'ALL_ANSWERED' }
   | { type: 'ERROR'; error: string };
 
 export const gameStateMachine = setup({
   types: {} as {
     context: GameContext;
     events: GameEvent;
-  },
-  actors: {
-    questionTimer: fromCallback(({ input, self }) => {
-      // Use timePerQuestion from Redis (input is the context)
-      const context = input as GameContext;
-      const timeLimitSeconds = context.room?.timePerQuestion;
-      const gameStartedAt = context.gameStartedAt;
-      
-      if (!timeLimitSeconds || !gameStartedAt) {
-        // If no time limit or start time, don't start timer
-        return () => {};
-      }
-      
-      // Calculate elapsed time since game started
-      const now = new Date();
-      const elapsedMs = now.getTime() - gameStartedAt.getTime();
-      const elapsedSeconds = Math.floor(elapsedMs / 1000);
-      
-      // Calculate which question cycle we're in using currentQuestionIndex
-      // Each cycle = timePerQuestion + review time (8 seconds)
-      const REVIEW_TIME_SECONDS = 8;
-      const totalTimePerCycle = timeLimitSeconds + REVIEW_TIME_SECONDS;
-      
-      // Calculate when the current question cycle started
-      const questionIndex = context.currentQuestionIndex;
-      const cycleStartTime = questionIndex * totalTimePerCycle;
-      const timeInCurrentCycle = elapsedSeconds - cycleStartTime;
-      
-      // If we're in the question phase of the current cycle
-      if (timeInCurrentCycle >= 0 && timeInCurrentCycle < timeLimitSeconds) {
-        const remainingInQuestion = timeLimitSeconds - timeInCurrentCycle;
-        const timeout = setTimeout(() => {
-          self.send({ type: 'TIMER_EXPIRED' } as GameEvent);
-        }, remainingInQuestion * 1000);
-        
-        return () => clearTimeout(timeout);
-      } else {
-        // We're already past the question phase, send expired immediately
-        // Use a small delay to avoid synchronous state updates
-        const timeout = setTimeout(() => {
-          self.send({ type: 'TIMER_EXPIRED' } as GameEvent);
-        }, 10);
-        
-        return () => clearTimeout(timeout);
-      }
-    }),
   },
   actions: {
     updateRoom: assign({
@@ -126,12 +87,15 @@ export const gameStateMachine = setup({
   context: {
     room: null,
     gameStartedAt: null,
+    questionStartedAt: null,
+    reviewStartedAt: null,
     isCorrect: false,
+    selectedAnswer: null as string | null,
     score: 0,
     leaderboard: [],
     error: '',
-      currentQuestionIndex: 0,
-      currentRound: 0,
+    currentQuestionIndex: 0,
+    currentRound: 0,
   },
   onTransition: ({ value, context, event }: { value: string | Record<string, unknown> | undefined; context: GameContext; event: GameEvent }) => {
     console.log('🔄 Game State Transition:', {
@@ -169,26 +133,33 @@ export const gameStateMachine = setup({
     },
 
     question: {
-      // Reset isCorrect to false when entering a new question
+      // Reset isCorrect, reviewStartedAt, selectedAnswer, and set when this question started so timer resets per question
       entry: assign({
         isCorrect: () => false,
+        reviewStartedAt: () => null,
+        selectedAnswer: () => null,
+        questionStartedAt: () => new Date(),
       }),
-      invoke: {
-        src: 'questionTimer',
-        input: ({ context }) => context,
-      },
       on: {
         ANSWER_SUBMITTED: {
           actions: assign({
             isCorrect: ({ event }) => (event as Extract<GameEvent, { type: 'ANSWER_SUBMITTED' }>).isCorrect,
             score: ({ event }) => (event as Extract<GameEvent, { type: 'ANSWER_SUBMITTED' }>).score,
+            selectedAnswer: ({ event }) => (event as Extract<GameEvent, { type: 'ANSWER_SUBMITTED' }>).selectedAnswer ?? null,
           }),
         },
         TIMER_EXPIRED: {
           target: 'submitted',
-          // Preserve the isCorrect value (will be false if no answer submitted, or the correct value if answer was submitted)
           actions: assign({
             isCorrect: ({ context }) => context.isCorrect,
+            reviewStartedAt: () => new Date(),
+          }),
+        },
+        ALL_ANSWERED: {
+          target: 'submitted',
+          actions: assign({
+            isCorrect: ({ context }) => context.isCorrect,
+            reviewStartedAt: () => new Date(),
           }),
         },
         ROOM_UPDATED: {
@@ -231,6 +202,15 @@ export const gameStateMachine = setup({
         ],
       },
       on: {
+        // Player submitted after we already transitioned via ALL_ANSWERED (e.g. they were the last to submit).
+        // Update context so the reveal screen shows their selected answer.
+        ANSWER_SUBMITTED: {
+          actions: assign({
+            isCorrect: ({ event }) => (event as Extract<GameEvent, { type: 'ANSWER_SUBMITTED' }>).isCorrect,
+            score: ({ event }) => (event as Extract<GameEvent, { type: 'ANSWER_SUBMITTED' }>).score,
+            selectedAnswer: ({ event }) => (event as Extract<GameEvent, { type: 'ANSWER_SUBMITTED' }>).selectedAnswer ?? null,
+          }),
+        },
         QUESTION_CHANGED: {
           target: 'question',
           actions: assign({

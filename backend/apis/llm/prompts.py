@@ -15,9 +15,19 @@ from google.genai import types
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+# Load backend/.env first (with override) so GEMINI_API_KEY from backend/.env is always used
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_backend_dir = os.path.abspath(os.path.join(_this_dir, "..", ".."))
+_backend_env = os.path.join(_backend_dir, ".env")
+if os.path.isfile(_backend_env):
+    load_dotenv(_backend_env, override=True)
+# Also load from project root and cwd so other vars are available
+_root_env = os.path.join(_backend_dir, "..", ".env")
+if os.path.isfile(_root_env):
+    load_dotenv(_root_env)
+load_dotenv()  # cwd .env
 
-MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.0-flash")
+MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-3-flash-preview")
 
 
 def get_gemini_api_key() -> str:
@@ -84,6 +94,12 @@ Example format:
         
         logger.info("Gemini API call successful")
     except Exception as e:
+        err_str = str(e).lower()
+        if "api key not valid" in err_str or "invalid_argument" in err_str or "api_key_invalid" in err_str:
+            raise RuntimeError(
+                "Gemini API key is invalid or missing. Get a key at https://aistudio.google.com/app/apikey "
+                "and set GEMINI_API_KEY in backend/.env or your environment."
+            ) from e
         logger.error(f"Failed to call Gemini API: {e}")
         raise RuntimeError(f"Error calling Gemini API: {e}") from e
 

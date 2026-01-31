@@ -1,8 +1,10 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import PlayerHeader from './PlayerHeader';
 import {
   GameScreenContainer,
+  GameScreenContent,
   GameCard,
   GameTitle,
   LeaderboardSection,
@@ -10,7 +12,6 @@ import {
   LeaderboardList,
   LeaderboardItem,
   TopicBadge,
-  GameTitleImage,
 } from './styled/GameComponents';
 import { ButtonLarge, ButtonContainerCenter } from './styled/FormComponents';
 
@@ -68,7 +69,8 @@ export default function GameFinished({
 
   return (
     <GameScreenContainer>
-      <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+      <PlayerHeader />
+      <GameScreenContent>
       <GameCard>
         <GameTitle>Game Finished! 🎉</GameTitle>
         <LeaderboardSection>
@@ -107,6 +109,7 @@ export default function GameFinished({
           <ButtonLarge onClick={handleNewGame}>New Game</ButtonLarge>
         </ButtonContainerCenter>
       </GameCard>
+      </GameScreenContent>
     </GameScreenContainer>
   );
 }

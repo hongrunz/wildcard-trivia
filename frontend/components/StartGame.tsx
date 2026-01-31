@@ -11,7 +11,10 @@ import {
   ButtonPrimary,
   Input,
 } from './styled/FormComponents';
+import PlayerHeader from './PlayerHeader';
 import {
+  PlayerPageContainer,
+  PlayerPageContent,
   QRCodeContainer,
   GameContainer,
   TopicsSection,
@@ -24,7 +27,6 @@ import {
   PlayerListItemAvatar,
   PlayerListItemName,
   PlayerListContainer,
-  GameTitleImage,
 } from './styled/GameComponents';
 import { api, tokenStorage, RoomResponse } from '../lib/api';
 import { useWebSocket } from '../lib/useWebSocket';
@@ -198,19 +200,19 @@ export default function StartGame({ roomId }: StartGameProps) {
   return (
     <>
       <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-      <PageContainer>
-        <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
+      <PlayerPageContainer>
+        <PlayerHeader />
+        <PlayerPageContent>
         <CardsContainer>
           {/* Player List Card */}
           <PlayerListCard>
             <PlayerListTitle>Players</PlayerListTitle>
             <PlayerListContainer>
               {room.players.length > 0 ? (
-                room.players.map((player) => {
-                  // Generate a consistent avatar based on player ID
-                  // There are 10 avatars (avatar_1.svg through avatar_10.svg)
+                room.players.map((player, index) => {
+                  // Assign unique avatars by position (1–10); wrap only when more than 10 players
                   const avatarCount = 10;
-                  const avatarIndex = (player.playerId.charCodeAt(0) % avatarCount) + 1;
+                  const avatarIndex = (index % avatarCount) + 1;
                   const avatarSrc = `/assets/avatars/avatar_${avatarIndex}.svg`;
                   
                   return (
@@ -291,7 +293,8 @@ export default function StartGame({ roomId }: StartGameProps) {
             </GameContainer>
           </FormCard>
         </CardsContainer>
-      </PageContainer>
+        </PlayerPageContent>
+      </PlayerPageContainer>
     </>
   );
 }

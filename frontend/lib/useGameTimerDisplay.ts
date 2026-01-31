@@ -3,10 +3,15 @@
 import { useState, useEffect } from 'react';
 import { RoomResponse } from './api';
 
+const REVIEW_TIME_SECONDS = 8;
+
 interface UseGameTimerDisplayOptions {
   room: RoomResponse | null;
   gameState: 'question' | 'submitted' | 'roundFinished' | 'newRound' | 'finished';
-  gameStartedAt: Date | null;
+  /** When the current question was shown; used so the question timer resets per question and uses timePerQuestion. */
+  questionStartedAt: Date | null;
+  /** When answer revelation started; used for review-phase countdown. */
+  reviewStartedAt?: Date | null;
   currentQuestionIndex: number; // Current question index (0-indexed)
 }
 
@@ -19,89 +24,59 @@ const ROUND_BREAK_TIME_SECONDS = 10;
 export function useGameTimerDisplay({
   room,
   gameState,
-  gameStartedAt,
+  questionStartedAt,
+  reviewStartedAt = null,
   currentQuestionIndex,
 }: UseGameTimerDisplayOptions) {
   const [timer, setTimer] = useState<number | undefined>(undefined);
 
   useEffect(() => {
-    if (!room?.timePerQuestion) {
-      // Use setTimeout to avoid synchronous setState
+    if (gameState === 'submitted') {
+      // Answer revelation: timer starts when we enter this state (all answered or question time expired)
+      if (reviewStartedAt) {
+        const updateTimer = () => {
+          const now = new Date();
+          const elapsedMs = now.getTime() - reviewStartedAt.getTime();
+          const remainingSeconds = REVIEW_TIME_SECONDS - elapsedMs / 1000;
+          setTimer(remainingSeconds <= 0 ? 0 : Math.ceil(remainingSeconds));
+        };
+        setTimeout(updateTimer, 0);
+        const interval = setInterval(updateTimer, 100);
+        return () => clearInterval(interval);
+      }
+      const timeout = setTimeout(() => setTimer(undefined), 0);
+      return () => clearTimeout(timeout);
+    }
+
+    if (gameState === 'question' && questionStartedAt && room?.timePerQuestion) {
+      // Question phase: show remaining time from when this question started (always uses timePerQuestion)
+      let interval: ReturnType<typeof setInterval> | null = null;
+      const updateTimer = () => {
+        const now = new Date();
+        const elapsedMs = now.getTime() - questionStartedAt.getTime();
+        const elapsedSeconds = elapsedMs / 1000;
+        const remaining = room!.timePerQuestion - elapsedSeconds;
+        if (remaining <= 0) {
+          setTimer(0);
+        } else {
+          setTimer(Math.ceil(remaining));
+        }
+      };
+      setTimeout(updateTimer, 0);
+      interval = setInterval(updateTimer, 100);
+      return () => {
+        if (interval) clearInterval(interval);
+      };
+    }
+
+    if (gameState === 'question' && (!questionStartedAt || !room?.timePerQuestion)) {
       const timeout = setTimeout(() => setTimer(undefined), 0);
       return () => clearTimeout(timeout);
     }
 
     let interval: ReturnType<typeof setInterval> | null = null;
 
-    if (gameState === 'question' && gameStartedAt) {
-      // Calculate remaining time based on server time for synchronization
-      const updateTimer = () => {
-        const now = new Date();
-        const elapsedMs = now.getTime() - gameStartedAt.getTime();
-        const elapsedSeconds = Math.floor(elapsedMs / 1000);
-        
-        // Handle clock skew - if elapsed time is negative, don't show timer
-        if (elapsedSeconds < 0) {
-          setTimer(undefined);
-          return;
-        }
-        
-        // Calculate time for current question cycle using currentQuestionIndex
-        const REVIEW_TIME_SECONDS = 8;
-        const totalTimePerCycle = room.timePerQuestion + REVIEW_TIME_SECONDS;
-        
-        // Calculate when the current question cycle started
-        const cycleStartTime = currentQuestionIndex * totalTimePerCycle;
-        const timeInCurrentCycle = elapsedSeconds - cycleStartTime;
-        
-        if (timeInCurrentCycle >= 0 && timeInCurrentCycle < room.timePerQuestion) {
-          // We're in the question phase
-          const remaining = room.timePerQuestion - timeInCurrentCycle;
-          setTimer(Math.max(0, Math.ceil(remaining)));
-        } else if (timeInCurrentCycle < 0) {
-          // We haven't reached this question cycle yet (clock skew or timing issue)
-          setTimer(undefined);
-        } else {
-          // We're past the question phase
-          setTimer(undefined);
-        }
-      };
-      
-      // Initial calculation with setTimeout to avoid synchronous setState
-      setTimeout(updateTimer, 0);
-      interval = setInterval(updateTimer, 100); // Update every 100ms
-    } else if (gameState === 'submitted' && gameStartedAt) {
-      // Calculate remaining review time based on server time
-      const updateTimer = () => {
-        const now = new Date();
-        const elapsedMs = now.getTime() - gameStartedAt.getTime();
-        const elapsedSeconds = Math.floor(elapsedMs / 1000);
-        
-        // Handle clock skew - if elapsed time is negative, don't show timer
-        if (elapsedSeconds < 0) {
-          setTimer(undefined);
-          return;
-        }
-        
-        const REVIEW_TIME_SECONDS = 8;
-        const totalTimePerCycle = room.timePerQuestion + REVIEW_TIME_SECONDS;
-        
-        // Calculate when the current question cycle started
-        const cycleStartTime = currentQuestionIndex * totalTimePerCycle;
-        const timeInCurrentCycle = elapsedSeconds - cycleStartTime;
-        const timeInReview = timeInCurrentCycle - room.timePerQuestion;
-        
-        if (timeInReview >= 0 && timeInReview < REVIEW_TIME_SECONDS) {
-          const remaining = REVIEW_TIME_SECONDS - timeInReview;
-          setTimer(Math.max(0, Math.ceil(remaining)));
-        } else {
-          setTimer(undefined); // Don't show timer if calculation is invalid
-        }
-      };
-      
-      setTimeout(updateTimer, 0);
-      interval = setInterval(updateTimer, 100);
-    } else if (gameState === 'roundFinished') {
+    if (gameState === 'roundFinished') {
       // Countdown from round break time
       let remaining = ROUND_BREAK_TIME_SECONDS;
       setTimeout(() => setTimer(remaining), 0);
@@ -122,7 +97,7 @@ export function useGameTimerDisplay({
       return () => {
         if (interval) clearInterval(interval);
       };
-    }, [gameState, room?.timePerQuestion, gameStartedAt, currentQuestionIndex]);
+    }, [gameState, room?.timePerQuestion, questionStartedAt, reviewStartedAt, currentQuestionIndex]);
 
   return {
     timer,

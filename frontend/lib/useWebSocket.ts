@@ -33,6 +33,15 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
   const reconnectAttemptsRef = useRef(0);
   const [isConnected, setIsConnected] = useState(false);
   const shouldReconnect = useRef(true);
+  const onMessageRef = useRef(onMessage);
+  const onOpenRef = useRef(onOpen);
+  const onCloseRef = useRef(onClose);
+  const onErrorRef = useRef(onError);
+
+  onMessageRef.current = onMessage;
+  onOpenRef.current = onOpen;
+  onCloseRef.current = onClose;
+  onErrorRef.current = onError;
 
   const connect = useCallback(() => {
     if (!roomId || typeof window === 'undefined') return;
@@ -56,22 +65,22 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
       ws.onopen = () => {
         setIsConnected(true);
         reconnectAttemptsRef.current = 0; // Reset on successful connection
-        onOpen?.();
+        onOpenRef.current?.();
       };
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          onMessage?.(message);
-        } catch (error) {
-          // Failed to parse WebSocket message
+          onMessageRef.current?.(message);
+        } catch {
+          // Ignore unparseable WebSocket messages
         }
       };
 
       ws.onclose = (event) => {
         setIsConnected(false);
         wsRef.current = null;
-        onClose?.();
+        onCloseRef.current?.();
 
         // Attempt to reconnect only for abnormal closures with exponential backoff
         if (reconnect && shouldReconnect.current && !event.wasClean && reconnectAttemptsRef.current < maxReconnectAttempts) {
@@ -87,12 +96,12 @@ export function useWebSocket(roomId: string | null, options: UseWebSocketOptions
 
       ws.onerror = (error) => {
         // WebSocket errors don't provide detailed information in browsers
-        onError?.(error);
+        onErrorRef.current?.(error);
       };
     } catch (error) {
       // Failed to create WebSocket connection
     }
-  }, [roomId, onMessage, onOpen, onClose, onError, reconnect, reconnectInterval]);
+  }, [roomId, reconnect, reconnectInterval]);
 
   // Connect on mount and when roomId changes
   useEffect(() => {

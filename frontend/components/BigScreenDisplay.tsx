@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useMachine } from '@xstate/react';
 import GameFinished from './GameFinished';
 import BigScreenRoundFinished from './BigScreenRoundFinished';
@@ -11,14 +11,11 @@ import { useBackgroundMusic } from '../lib/useBackgroundMusic';
 import { useGameTimerDisplay } from '../lib/useGameTimerDisplay';
 import { gameStateMachine, type LeaderboardEntry } from '../lib/gameStateMachine';
 import MusicControl from './MusicControl';
-import { GameScreenContainer, GameTitle, TopicsContainer, TopicBadge, GameTitleImage, PlayerListTitle, PlayerListItem, PlayerListItemAvatar, PlayerListItemName, PlayerListContainer } from './styled/GameComponents';
+import { GameTitle, GameTitleImage, PlayerListTitle, PlayerListItem, PlayerListItemAvatar, PlayerListItemName, PlayerListContainer } from './styled/GameComponents';
 import {
   BigScreenCard,
-  BigScreenHeader,
-  BigScreenBadge,
   BigScreenQuestionText,
   BigScreenOptionsContainer,
-  BigScreenOptionBox,
   BigScreenExplanation,
   ErrorTitle,
   BigScreenLayout,
@@ -49,6 +46,13 @@ interface BigScreenDisplayProps {
 export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   // Use XState machine for formal state management
   const [state, send] = useMachine(gameStateMachine);
+
+  // Keep latest state in a ref so WebSocket handler always sees current state (avoids stale closure)
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  // Fallback: track which players have submitted for current question; transition when we've seen everyone (if backend never sends all_answers_submitted)
+  const submittedForQuestionRef = useRef<Map<string, Set<string>>>(new Map());
   
   // Local state for topic submission tracking (not part of game state machine)
   const [topicSubmissionCount, setTopicSubmissionCount] = useState(0);
@@ -132,44 +136,36 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   // Get current question index from state machine context
   const currentQuestionIndex = state.context.currentQuestionIndex;
 
-  // Game timer display hook (synchronized to server time)
+  // Game timer display hook (resets per question, always uses timePerQuestion)
   const { timer } = useGameTimerDisplay({
     room: state.context.room,
     gameState: state.value as 'question' | 'submitted' | 'roundFinished' | 'newRound' | 'finished',
-    gameStartedAt: state.context.gameStartedAt,
+    questionStartedAt: state.context.questionStartedAt,
+    reviewStartedAt: state.context.reviewStartedAt,
     currentQuestionIndex: state.context.currentQuestionIndex,
   });
 
-  // Send TIMER_EXPIRED when question timer runs out (synchronized to server time)
+  // Send TIMER_EXPIRED when question timer runs out (timePerQuestion seconds from when this question started)
   useEffect(() => {
-    if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.gameStartedAt) {
-      const calculateRemainingTime = () => {
+    if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.questionStartedAt) {
+      const timePerQuestionMs = state.context.room.timePerQuestion * 1000;
+      const check = () => {
         const now = new Date();
-        const elapsedMs = now.getTime() - state.context.gameStartedAt!.getTime();
-        const elapsedSeconds = Math.floor(elapsedMs / 1000);
-        
-        const REVIEW_TIME_SECONDS = 8;
-        const totalTimePerCycle = state.context.room!.timePerQuestion + REVIEW_TIME_SECONDS;
-        const timeInCurrentCycle = elapsedSeconds % totalTimePerCycle;
-        
-        if (timeInCurrentCycle < state.context.room!.timePerQuestion) {
-          return state.context.room!.timePerQuestion - timeInCurrentCycle;
-        }
-        return 0; // Already past question phase
-      };
-      
-      const remainingSeconds = calculateRemainingTime();
-      if (remainingSeconds > 0) {
-        const timeout = setTimeout(() => {
+        const elapsedMs = now.getTime() - state.context.questionStartedAt!.getTime();
+        const remainingMs = timePerQuestionMs - elapsedMs;
+        if (remainingMs <= 0) {
           send({ type: 'TIMER_EXPIRED' });
-        }, remainingSeconds * 1000);
-        return () => clearTimeout(timeout);
-      } else {
-        // Already past, send immediately
-        send({ type: 'TIMER_EXPIRED' });
-      }
+          return true;
+        }
+        return false;
+      };
+      if (check()) return;
+      const interval = setInterval(() => {
+        if (check()) clearInterval(interval);
+      }, 100);
+      return () => clearInterval(interval);
     }
-  }, [state.value, state.context.room?.timePerQuestion, state.context.gameStartedAt, send]);
+  }, [state.value, state.context.room?.timePerQuestion, state.context.questionStartedAt, send]);
 
   // Initial room fetch
   useEffect(() => {
@@ -190,6 +186,8 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     type: string;
     startedAt?: string;
     currentRound?: number;
+    questionId?: string;
+    playerId?: string;
     submittedCount?: number;
     topic?: string;
     topics?: string[];
@@ -201,11 +199,13 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     };
   }) => {
     if (message.type === 'game_started') {
+      submittedForQuestionRef.current.clear();
       fetchRoom();
       return;
     }
     
     if (message.type === 'round_changed') {
+      submittedForQuestionRef.current.clear();
       // New round has started - update timer sync and fetch updated room data
       const roomData = await api.getRoom(roomId);
       if (message.startedAt) {
@@ -220,6 +220,38 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     }
     
     if (message.type === 'answer_submitted') {
+      const current = stateRef.current;
+      const room = current.context.room;
+      const questionId = message.questionId != null ? String(message.questionId) : '';
+      const playerId = message.playerId != null ? String(message.playerId) : '';
+      if (questionId && playerId && room?.players?.length) {
+        let set = submittedForQuestionRef.current.get(questionId);
+        if (!set) {
+          set = new Set();
+          submittedForQuestionRef.current.set(questionId, set);
+        }
+        set.add(playerId);
+        const inQuestion = current.value === 'question';
+        const currentQuestionId = room.questions?.[current.context.currentQuestionIndex]?.id;
+        const questionMatch = currentQuestionId != null && String(currentQuestionId) === questionId;
+        if (inQuestion && questionMatch && set.size >= room.players.length) {
+          submittedForQuestionRef.current.delete(questionId);
+          send({ type: 'ALL_ANSWERED' });
+        }
+      }
+      fetchLeaderboard();
+      return;
+    }
+
+    if (message.type === 'all_answers_submitted') {
+      const current = stateRef.current;
+      const inQuestion = current.value === 'question';
+      const currentQuestionId = current.context.room?.questions?.[current.context.currentQuestionIndex]?.id;
+      const messageQuestionId = message.questionId != null ? String(message.questionId) : '';
+      const questionMatch = !messageQuestionId || !currentQuestionId || messageQuestionId === String(currentQuestionId);
+      if (inQuestion && questionMatch) {
+        send({ type: 'ALL_ANSWERED' });
+      }
       fetchLeaderboard();
       return;
     }
@@ -284,7 +316,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   // Error state
   if (state.value === 'error' || state.context.error) {
     return (
-      <>f
+      <>
         <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
         <BigScreenContainer>
           <BigScreenCard>
@@ -349,6 +381,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
           submittedCount={topicSubmissionCount}
           totalPlayers={state.context.room.players.length}
           collectedTopics={collectedTopics}
+          leaderboard={state.context.leaderboard}
         />
       </>
     );
@@ -384,65 +417,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     );
   }
 
-  // Active question display
-  if (state.value === 'question') {
-    return (
-      <>
-        <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
-        <GameScreenContainer>
-          <GameTitleImage src="/assets/game_title.svg" alt="Ultimate Trivia" />
-          <BigScreenCard>
-            {/* Header with question number and timer */}
-            <BigScreenHeader>
-              <BigScreenBadge>
-                {currentQuestionIndex + 1}/{state.context.room.questionsPerRound}
-              </BigScreenBadge>
-              <BigScreenBadge>
-                {timer}
-              </BigScreenBadge>
-            </BigScreenHeader>
-
-            {/* Display topics */}
-            {currentQuestion.topics && currentQuestion.topics.length > 0 && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <MutedText style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'center' }}>
-                  Topics:
-                </MutedText>
-                <TopicsContainer>
-                  {currentQuestion.topics.map((topic, index) => (
-                    <TopicBadge key={index}>
-                      {topic}
-                    </TopicBadge>
-                  ))}
-                </TopicsContainer>
-              </div>
-            )}
-
-            {/* Question text */}
-            <BigScreenQuestionText>
-              {currentQuestion.question}
-            </BigScreenQuestionText>
-
-            {/* Options - no answer revealed yet */}
-            <BigScreenOptionsContainer>
-              {currentQuestion.options.map((option, index) => (
-                <BigScreenOptionBox 
-                  key={index}
-                  $showAnswer={false}
-                  $isCorrect={false}
-                >
-                  {option}
-                </BigScreenOptionBox>
-              ))}
-            </BigScreenOptionsContainer>
-          </BigScreenCard>
-        </GameScreenContainer>
-      </>
-    );
-  }
-
-
-  // Active question display
+  // Active question display (and submitted) — always use full layout with avatar + leaderboard
   return (
     <>
       <MusicControl isMuted={isMuted} onToggle={toggleMute} disabled={!isLoaded} />
@@ -473,10 +448,10 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
               <PlayerListTitle>Leaderboard</PlayerListTitle>
               <PlayerListContainer>
                 {state.context.leaderboard.length > 0 ? (
-                  state.context.leaderboard.map((entry: LeaderboardEntry) => {
-                    // Generate a consistent avatar based on player ID
+                  state.context.leaderboard.map((entry: LeaderboardEntry, index: number) => {
+                    // Assign unique avatars by position (1–10); wrap only when more than 10 players
                     const avatarCount = 10;
-                    const avatarIndex = (entry.playerId.charCodeAt(0) % avatarCount) + 1;
+                    const avatarIndex = (index % avatarCount) + 1;
                     const avatarSrc = `/assets/avatars/avatar_${avatarIndex}.svg`;
                     
                     return (
@@ -522,18 +497,18 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
                 {currentQuestion.question}
               </BigScreenQuestionText>
 
-              {/* Options - Vertical stack */}
+              {/* Options - only highlight correct answer and show explanation when in answer revelation (submitted) */}
               <BigScreenOptionsContainer>
                 {currentQuestion.options.map((option, index) => {
-                  const showAnswer = timer !== undefined && timer <= 0;
+                  const isAnswerRevelation = state.value === 'submitted';
                   const isCorrect = index === currentQuestion.correctAnswer;
                   return (
                     <BigScreenOptionButton
                       key={index}
                       disabled
                       style={{
-                        backgroundColor: showAnswer && isCorrect ? colors.green[500] : colors.surface,
-                        color: showAnswer && isCorrect ? colors.surface : colors.typeMain,
+                        backgroundColor: isAnswerRevelation && isCorrect ? colors.green[500] : colors.surface,
+                        color: isAnswerRevelation && isCorrect ? colors.surface : colors.typeMain,
                         cursor: 'default',
                         textAlign: 'center',
                         border: `1px solid ${colors.border}`,
@@ -545,8 +520,8 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
                 })}
               </BigScreenOptionsContainer>
 
-              {/* Show explanation after time expires */}
-              {timer !== undefined && timer <= 0 && currentQuestion.explanation && (
+              {/* Show explanation only when in answer revelation (all players have submitted) */}
+              {state.value === 'submitted' && currentQuestion.explanation && (
                 <BigScreenExplanation>
                   <strong>Explanation:</strong> {currentQuestion.explanation}
                 </BigScreenExplanation>

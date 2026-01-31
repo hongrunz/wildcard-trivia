@@ -12,7 +12,7 @@ export const SuccessText = styled.div`
 
 // Muted text for empty states
 export const MutedText = styled.div`
-  color: ${colors.typeSecondary};
+  color: ${colors.typeMain};
   font-family: ${typography.presets.bodySmall.fontFamily};
   font-size: ${typography.presets.bodySmall.fontSize};
   font-weight: ${typography.presets.bodySmall.fontWeight};
