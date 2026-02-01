@@ -338,6 +338,53 @@ railway open
 
 ---
 
+## Deploying After Merge to Main
+
+To make sure changes deploy correctly after merging to `main`:
+
+### 1. Configure Railway to deploy from `main`
+
+1. In [Railway](https://railway.app/) → your project → each service (Frontend, Backend).
+2. **Settings** → find **"Branch"** or **"Source"**.
+3. Set the production branch to **`main`** (or the branch you use for production).
+4. Railway will then auto-deploy on every push to `main`.
+
+### 2. Before merging: verify locally
+
+```bash
+# From repo root
+npm install && npm run build          # Frontend builds
+cd backend && pip install -r requirements.txt && uvicorn apis.main:app --host 0.0.0.0 --port 8000   # Backend runs
+```
+
+- Fix any build or runtime errors before merging.
+
+### 3. Environment variables (already set once)
+
+No code changes needed. Ensure in Railway:
+
+- **Backend**: `REDIS_URL`, `GEMINI_API_KEY`, `GEMINI_MODEL_NAME`, `FRONTEND_URL`
+- **Frontend**: `NEXT_PUBLIC_API_URL` = your backend URL
+
+If you add new env vars in code, add them in Railway **Variables** for the right service.
+
+### 4. After merging
+
+1. Push/merge to `main` (e.g. merge PR from `feature/styling-theme-and-avatars`).
+2. Railway will detect the push and redeploy Frontend and Backend (each service builds from repo root or its root directory).
+3. Check **Deployments** in the Railway dashboard for build/deploy logs and errors.
+
+### 5. Quick checklist
+
+| Check | Why |
+|-------|-----|
+| Railway project is connected to the correct GitHub repo | Deploys come from this repo |
+| Production branch is `main` (or your default) | Merges to this branch trigger deploy |
+| All env vars set in Railway (no `.env` in repo) | Build and runtime need API keys, URLs |
+| `npm run build` and backend start work locally | Avoids deploy-time failures |
+
+---
+
 ## Next Steps After Deployment
 
 1. ✅ Test all game features thoroughly
