@@ -34,7 +34,7 @@ import { useBackgroundMusic } from '../lib/useBackgroundMusic';
 import MusicControl from './MusicControl';
 
 const DEFAULT_NUM_QUESTIONS = 3;
-const DEFAULT_TIME_LIMIT = 20;
+const DEFAULT_TIME_LIMIT = 30;
 const DEFAULT_NUM_ROUNDS = 3;
 
 /** Answer reveal timer length (seconds) — must match useGameTimerDisplay.REVIEW_TIME_SECONDS */

@@ -14,7 +14,6 @@ from typing import Any, Dict
 TEMPLATES: Dict[str, str] = {
     "game_started": "Welcome to Wildcard Trivia! Let's get this game started!",
     "question_shown": "Here's your next question: {question}",
-    "answer_revealed": "The correct answer is {answer}. {explanation}",
     "round_finished": "Round {round} complete! Great job everyone!",
     "game_finished": "That's a wrap! Let's see the final scores!",
     "awards": "Congratulations to {players} for {award}!",

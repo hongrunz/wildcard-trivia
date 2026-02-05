@@ -106,16 +106,24 @@ def _commentary_key(room_id: str, commentary_id: str) -> str:
 
 
 async def _generate_question_audio(question_text: str, question_id: str) -> Optional[str]:
-    """Generate TTS audio for a question and store in Redis. Returns audio URL."""
+    """
+    Generate TTS audio for a question and store in Redis. Returns audio URL.
+    
+    Note: This reads ONLY the question text as-is, without any prefix, answer, or explanation.
+    """
     try:
+        # Log question being read
+        logger.info(f"Generating question audio for question_id={question_id}: {question_text}")
+        
         # Use question_id as part of cache key for determinism
         import hashlib
         text_hash = hashlib.sha256(question_text.encode("utf-8")).hexdigest()[:16]
         cache_key = f"question:tts:{text_hash}"
         # Run synchronous TTS generation in thread pool to avoid blocking
+        # Pass question_text directly - no additions, no answers, just the question
         def _generate():
             return get_audio_url(
-                question_text,
+                question_text.strip(),  # Just the question text, no extra content
                 cache_key,
                 voice_config={"style": "game_show_host"},
             )
@@ -123,6 +131,7 @@ async def _generate_question_audio(question_text: str, question_id: str) -> Opti
         # Store the URL in Redis for quick lookup
         r = get_redis_client()
         r.set(_question_audio_url_key(question_id), audio_url)
+        logger.info(f"Question audio generated successfully for question_id={question_id}")
         return audio_url
     except Exception as e:
         logger.error(f"Failed to generate TTS for question {question_id}: {e}")
@@ -132,7 +141,7 @@ async def _generate_question_audio(question_text: str, question_id: str) -> Opti
 async def _generate_questions_audio(questions: list[dict], question_ids: list[str]) -> dict[str, str]:
     """Generate TTS audio for multiple questions in parallel. Returns dict mapping question_id -> audio_url."""
     tasks = [
-        _generate_question_audio(q["question"], qid)
+        _generate_question_audio("Read the question as is, don't answer it: " + q["question"], qid)
         for q, qid in zip(questions, question_ids)
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -387,6 +396,26 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
             "questionsCount": len(sample_questions)
         })
         
+        # Broadcast commentary event for game started
+        try:
+            commentary_text = render_commentary("game_started", {})
+            cache_key = _commentary_key(room_id, "game_started")
+            audio_url = await asyncio.to_thread(
+                lambda: get_audio_url(
+                    commentary_text,
+                    cache_key,
+                    voice_config={"style": "game_show_host"},
+                )
+            )
+            await manager.broadcast_to_room(room_id, {
+                "type": "commentary_ready",
+                "eventType": "game_started",
+                "audioUrl": audio_url,
+                "text": commentary_text,
+            })
+        except Exception as e:
+            logger.error(f"Failed to generate game_started commentary: {e}")
+        
         return StartGameResponse(
             success=True,
             message="Game started successfully",
@@ -479,10 +508,11 @@ async def submit_answer(
         # If all players have answered, broadcast so clients can transition to answer revelation and start review timer
         all_answered = QuestionStore.record_answer_and_check_all(room_uuid, request.questionId, player.player_id)
         if all_answered:
+            review_started_at = datetime.now(timezone.utc)
             await manager.broadcast_to_room(room_id, {
                 "type": "all_answers_submitted",
                 "questionId": request.questionId,
-                "reviewStartedAt": datetime.now(timezone.utc).isoformat(),
+                "reviewStartedAt": review_started_at.isoformat(),
             })
 
         return SubmitAnswerResponse(
@@ -654,6 +684,31 @@ async def submit_topic(
                 "currentRound": next_round,
                 "questionsCount": len(sample_questions)
             })
+            
+            # Broadcast round finished commentary (for previous round)
+            try:
+                prev_round = next_round - 1
+                commentary_text = render_commentary("round_finished", {
+                    "round": prev_round,
+                })
+                commentary_id = f"round_finished_{prev_round}"
+                cache_key = _commentary_key(room_id, commentary_id)
+                audio_url = await asyncio.to_thread(
+                    lambda: get_audio_url(
+                        commentary_text,
+                        cache_key,
+                        voice_config={"style": "game_show_host"},
+                    )
+                )
+                await manager.broadcast_to_room(room_id, {
+                    "type": "commentary_ready",
+                    "eventType": "round_finished",
+                    "audioUrl": audio_url,
+                    "text": commentary_text,
+                    "commentaryId": commentary_id,
+                })
+            except Exception as e:
+                logger.error(f"Failed to generate round_finished commentary: {e}")
         
         return SubmitTopicResponse(
             success=True,
@@ -830,6 +885,7 @@ async def generate_commentary(room_id: str, request: GenerateCommentaryRequest):
         # Render commentary text from template
         try:
             commentary_text = render_commentary(request.eventType, request.data)
+            logger.info(f"Generating commentary audio for eventType={request.eventType}, room_id={room_id}: {commentary_text}")
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         
@@ -847,6 +903,7 @@ async def generate_commentary(room_id: str, request: GenerateCommentaryRequest):
                     voice_config={"style": "game_show_host"},
                 )
             audio_url = await asyncio.to_thread(_generate)
+            logger.info(f"Commentary audio generated successfully for eventType={request.eventType}, commentary_id={commentary_id}")
         except Exception as e:
             logger.error(f"Failed to generate TTS for commentary: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
