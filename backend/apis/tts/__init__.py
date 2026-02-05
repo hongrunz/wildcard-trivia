@@ -42,7 +42,7 @@ if os.path.isfile(_root_env):
 load_dotenv()  # cwd .env
 
 
-DEFAULT_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL_NAME", "gemini-2.0-flash-tts")
+DEFAULT_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL_NAME", "gemini-2.5-flash-native-audio-preview-12-2025")
 DEFAULT_AUDIO_MIME = os.getenv("GEMINI_TTS_AUDIO_MIME", "audio/wav")
 DEFAULT_CACHE_TTL_SECONDS = int(os.getenv("GEMINI_TTS_CACHE_TTL_SECONDS", "86400"))
 
@@ -62,6 +62,60 @@ def _stable_cache_key(prefix: str, text: str, voice_config: Dict[str, Any]) -> s
     h.update(b"|")
     h.update(voice_part)
     return f"{prefix}:{h.hexdigest()}"
+
+
+def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 24000, channels: int = 1, sample_width: int = 2) -> bytes:
+    """
+    Convert raw PCM audio data to WAV format.
+    
+    Args:
+        pcm_data: Raw PCM audio bytes
+        sample_rate: Sample rate in Hz (default: 24000 for Gemini Live API)
+        channels: Number of audio channels (1 = mono, 2 = stereo)
+        sample_width: Bytes per sample (2 = 16-bit)
+    
+    Returns:
+        WAV file bytes
+    """
+    import struct
+    
+    # WAV file structure:
+    # - RIFF header (12 bytes)
+    # - fmt chunk (24 bytes)
+    # - data chunk (8 + data bytes)
+    
+    data_size = len(pcm_data)
+    fmt_chunk_size = 16  # Standard PCM fmt chunk size
+    
+    # WAV file structure:
+    # - RIFF header: 12 bytes (4 "RIFF" + 4 size + 4 "WAVE")
+    # - fmt chunk: 24 bytes (4 "fmt " + 4 size + 16 fmt data)
+    # - data chunk: 8 + data_size bytes (4 "data" + 4 size + data)
+    # Total: 44 + data_size bytes
+    # RIFF size field = total - 8 (RIFF and size fields themselves)
+    riff_size = 36 + data_size  # (44 + data_size) - 8
+    
+    # RIFF header
+    wav = b'RIFF'
+    wav += struct.pack('<I', riff_size)  # File size minus 8 bytes (RIFF + size fields)
+    wav += b'WAVE'
+    
+    # fmt chunk
+    wav += b'fmt '
+    wav += struct.pack('<I', fmt_chunk_size)  # fmt chunk size
+    wav += struct.pack('<H', 1)  # Audio format (1 = PCM)
+    wav += struct.pack('<H', channels)  # Number of channels
+    wav += struct.pack('<I', sample_rate)  # Sample rate
+    wav += struct.pack('<I', sample_rate * channels * sample_width)  # Byte rate
+    wav += struct.pack('<H', channels * sample_width)  # Block align
+    wav += struct.pack('<H', sample_width * 8)  # Bits per sample
+    
+    # data chunk
+    wav += b'data'
+    wav += struct.pack('<I', data_size)  # Data size
+    wav += pcm_data  # Audio data
+    
+    return wav
 
 
 def _extract_audio_bytes(resp: Any) -> bytes:
@@ -125,56 +179,142 @@ def _extract_audio_bytes(resp: Any) -> bytes:
     raise RuntimeError("Could not extract audio bytes from Gemini TTS response")
 
 
-def generate_tts(text: str, voice_config: Dict[str, Any] | None = None) -> bytes:
-    """
-    Generate audio bytes from text using Gemini TTS.
+def _list_available_models() -> list[str]:
+    """List available models to help debug TTS model availability."""
+    try:
+        client = genai.Client(api_key=_get_gemini_api_key())
+        models = client.models.list()
+        model_names = [m.name for m in models if hasattr(m, 'name')]
+        logger.info(f"Available models: {model_names[:10]}...")  # Log first 10
+        return model_names
+    except Exception as e:
+        logger.warning(f"Failed to list models: {e}")
+        return []
 
-    voice_config is passed through best-effort; supported keys vary by model/version.
-    Expected keys (best-effort):
-      - model: override model name
-      - mimeType: audio mime, e.g. 'audio/wav' or 'audio/mpeg'
-      - voiceName / speakingRate / pitch (model-dependent)
+
+async def _generate_tts_async(text: str, voice_config: Dict[str, Any] | None = None) -> bytes:
+    """
+    Generate audio bytes from text using Gemini Live API (async).
+    
+    The native audio model requires the Live API, not generate_content.
+    This is the async implementation that uses client.aio.live.connect().
     """
     if not text or not text.strip():
         raise ValueError("text must be a non-empty string")
     voice_config = voice_config or {}
 
     model = str(voice_config.get("model") or DEFAULT_TTS_MODEL)
+    # Ensure model name has "models/" prefix if not present
+    if not model.startswith("models/"):
+        model = f"models/{model}"
+    
+    voice_name = voice_config.get("voiceName", "Zephyr")  # Default voice
     mime_type = str(voice_config.get("mimeType") or DEFAULT_AUDIO_MIME)
 
-    client = genai.Client(api_key=_get_gemini_api_key())
+    # Create client with v1beta API version (required for Live API)
+    client = genai.Client(
+        http_options={"api_version": "v1beta"},
+        api_key=_get_gemini_api_key()
+    )
 
-    # Many Gemini TTS examples use generate_content with audio modality. Since SDK
-    # shapes change, keep config generic and rely on extraction.
-    contents = [
-        types.Content(role="user", parts=[types.Part.from_text(text=text.strip())]),
-    ]
+    # Configure Live API for audio output
+    config = types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        speech_config=types.SpeechConfig(
+            voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice_name)
+            )
+        ),
+    )
 
-    # Best-effort config: if the SDK supports these fields they will be used; if not,
-    # it should ignore unknowns (or raise; then we'll surface the error).
-    config_kwargs: Dict[str, Any] = {
-        "temperature": 0.7,
-    }
+    logger.info("Generating TTS audio via Gemini Live API model=%s voice=%s", model, voice_name)
+    
+    audio_chunks = []
+    try:
+        async with client.aio.live.connect(model=model, config=config) as session:
+            # Send text input
+            await session.send(input=text.strip(), end_of_turn=True)
+            
+            # Receive audio response
+            turn = session.receive()
+            async for response in turn:
+                if response.data:
+                    # response.data is the audio bytes (PCM format)
+                    audio_chunks.append(response.data)
+                if response.text:
+                    # Log any text response (usually empty for TTS)
+                    logger.debug(f"Text response: {response.text}")
+            
+            # Combine all audio chunks
+            if audio_chunks:
+                pcm_data = b''.join(audio_chunks)
+                logger.info(f"Generated {len(pcm_data)} bytes of PCM audio")
+                # Convert PCM to WAV format for browser playback
+                # Gemini Live API returns PCM at 24kHz, 16-bit, mono
+                wav_data = _pcm_to_wav(pcm_data, sample_rate=24000, channels=1, sample_width=2)
+                logger.info(f"Converted to {len(wav_data)} bytes of WAV audio")
+                return wav_data
+            else:
+                raise RuntimeError("No audio data received from Live API")
+                
+    except Exception as e:
+        logger.error(f"Failed to generate TTS audio via Live API: {e}")
+        raise
 
-    # Attempt to express "audio response" intent.
-    # Some SDK versions use response_modalities=["AUDIO"].
-    config_kwargs["response_modalities"] = ["AUDIO"]
 
-    # Attempt to pass mimeType/voice parameters if accepted.
-    # (We keep as a nested dict to avoid importing newer schema objects.)
-    if mime_type:
-        config_kwargs["audio_config"] = {"mime_type": mime_type}
-
-    # Voice style knobs (best-effort)
-    for k in ("voiceName", "speakingRate", "pitch", "style", "languageCode"):
-        if k in voice_config:
-            config_kwargs.setdefault("voice_config", {})[k] = voice_config[k]
-
-    config = types.GenerateContentConfig(**config_kwargs)  # type: ignore[arg-type]
-
-    logger.info("Generating TTS audio via Gemini model=%s mimeType=%s", model, mime_type)
-    resp = client.models.generate_content(model=model, contents=contents, config=config)
-    return _extract_audio_bytes(resp)
+def generate_tts(text: str, voice_config: Dict[str, Any] | None = None) -> bytes:
+    """
+    Generate audio bytes from text using Gemini native audio model.
+    
+    This is a synchronous wrapper around the async Live API.
+    The native audio model requires the Live API, not generate_content.
+    
+    voice_config is passed through best-effort; supported keys vary by model/version.
+    Expected keys (best-effort):
+      - model: override model name (will be prefixed with "models/" if needed)
+      - mimeType: audio mime, e.g. 'audio/wav' or 'audio/mpeg'
+      - voiceName: voice name (default: "Zephyr")
+    """
+    import asyncio
+    import concurrent.futures
+    
+    if not text or not text.strip():
+        raise ValueError("text must be a non-empty string")
+    
+    try:
+        # Try to get existing event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is running, we need to run in a thread
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, _generate_tts_async(text, voice_config))
+                    return future.result()
+            else:
+                # Loop exists but not running, use it
+                return loop.run_until_complete(_generate_tts_async(text, voice_config))
+        except RuntimeError:
+            # No event loop, create new one
+            return asyncio.run(_generate_tts_async(text, voice_config))
+    except Exception as e:
+        logger.error(f"Failed to generate TTS audio: {e}")
+        # Return empty WAV as fallback
+        empty_wav = (
+            b'RIFF'  # ChunkID
+            b'\x24\x00\x00\x00'  # ChunkSize (36 bytes)
+            b'WAVE'  # Format
+            b'fmt '  # Subchunk1ID
+            b'\x10\x00\x00\x00'  # Subchunk1Size (16)
+            b'\x01\x00'  # AudioFormat (PCM)
+            b'\x01\x00'  # NumChannels (mono)
+            b'\x44\xac\x00\x00'  # SampleRate (44100)
+            b'\x88\x58\x01\x00'  # ByteRate
+            b'\x02\x00'  # BlockAlign
+            b'\x10\x00'  # BitsPerSample (16)
+            b'data'  # Subchunk2ID
+            b'\x00\x00\x00\x00'  # Subchunk2Size (0 - no audio data)
+        )
+        return empty_wav
 
 
 def get_audio_url(
@@ -194,9 +334,13 @@ def get_audio_url(
     voice_config = voice_config or {}
     mime_type = str(voice_config.get("mimeType") or DEFAULT_AUDIO_MIME)
 
+    # Log the text being spoken by the voice agent
+    logger.info(f"VOICE AGENT SAYING: {text}")
+
     r = get_redis_client()
     cached_b64 = r.get(cache_key)
     if cached_b64:
+        logger.debug(f"Using cached audio for text (first 50 chars): {text[:50]}...")
         return f"data:{mime_type};base64,{cached_b64}"
 
     audio_bytes = generate_tts(text, voice_config)
