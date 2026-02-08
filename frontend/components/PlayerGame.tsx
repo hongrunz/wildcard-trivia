@@ -177,21 +177,39 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
 
   // Play countdown sound when timer reaches 12 seconds
   const countdownPlayedRef = useRef<number>(-1);
+  const countdownAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Start countdown audio when timer hits 12s
   useEffect(() => {
-    // Reset ref when question changes
-    if (countdownPlayedRef.current !== currentQuestionIndex && countdownPlayedRef.current !== -1) {
-      countdownPlayedRef.current = -1;
-    }
-    // Play countdown when timer hits 12 seconds for the first time in this question
     if (state.value === 'question' && timer === 12 && countdownPlayedRef.current !== currentQuestionIndex) {
       const audio = new Audio('/countdown.mp3');
       audio.volume = 0.8;
+      countdownAudioRef.current = audio;
       audio.play().catch(() => {
-        // Auto-play prevented by browser - that's okay
+        countdownAudioRef.current = null;
       });
       countdownPlayedRef.current = currentQuestionIndex;
     }
   }, [timer, state.value, currentQuestionIndex]);
+
+  // Stop countdown audio when leaving the question state (e.g. answer review) or question changes
+  useEffect(() => {
+    if (state.value !== 'question' && countdownAudioRef.current) {
+      countdownAudioRef.current.pause();
+      countdownAudioRef.current.currentTime = 0;
+      countdownAudioRef.current = null;
+    }
+  }, [state.value]);
+
+  // Reset played ref when question changes
+  useEffect(() => {
+    countdownPlayedRef.current = -1;
+    if (countdownAudioRef.current) {
+      countdownAudioRef.current.pause();
+      countdownAudioRef.current.currentTime = 0;
+      countdownAudioRef.current = null;
+    }
+  }, [currentQuestionIndex]);
 
   // Send TIMER_EXPIRED when question timer runs out (timePerQuestion seconds from when this question started)
   useEffect(() => {
