@@ -15,6 +15,7 @@ export default function MusicControl({ isMuted, onToggle, disabled = false, size
 
   return (
     <MusicControlContainer
+      $topOffset={size === 'small' ? '0.75rem' : undefined}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >

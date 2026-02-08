@@ -1,9 +1,9 @@
 import styled from 'styled-components';
 import { colors, typography } from './theme';
 
-export const MusicControlContainer = styled.div`
+export const MusicControlContainer = styled.div<{ $topOffset?: string }>`
   position: fixed;
-  top: 1.5rem;
+  top: ${props => props.$topOffset || '1.5rem'};
   right: 1.5rem;
   z-index: 1000;
 `;

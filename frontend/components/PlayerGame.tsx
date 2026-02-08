@@ -175,6 +175,24 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     currentQuestionIndex: state.context.currentQuestionIndex,
   });
 
+  // Play countdown sound when timer reaches 12 seconds
+  const countdownPlayedRef = useRef<number>(-1);
+  useEffect(() => {
+    // Reset ref when question changes
+    if (countdownPlayedRef.current !== currentQuestionIndex && countdownPlayedRef.current !== -1) {
+      countdownPlayedRef.current = -1;
+    }
+    // Play countdown when timer hits 12 seconds for the first time in this question
+    if (state.value === 'question' && timer === 12 && countdownPlayedRef.current !== currentQuestionIndex) {
+      const audio = new Audio('/countdown.mp3');
+      audio.volume = 0.8;
+      audio.play().catch(() => {
+        // Auto-play prevented by browser - that's okay
+      });
+      countdownPlayedRef.current = currentQuestionIndex;
+    }
+  }, [timer, state.value, currentQuestionIndex]);
+
   // Send TIMER_EXPIRED when question timer runs out (timePerQuestion seconds from when this question started)
   useEffect(() => {
     if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.questionStartedAt) {
