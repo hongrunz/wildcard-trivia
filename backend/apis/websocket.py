@@ -38,11 +38,21 @@ class ConnectionManager:
         disconnected = set()
         message_text = json.dumps(message)
         
-        for connection in self.active_connections[room_id].copy():
+        # Send to all connections in parallel for better performance
+        connections = list(self.active_connections[room_id].copy())
+        
+        async def send_to_connection(conn):
             try:
-                await connection.send_text(message_text)
+                await conn.send_text(message_text)
             except Exception:
-                disconnected.add(connection)
+                disconnected.add(conn)
+        
+        # Create tasks for all connections
+        send_tasks = [send_to_connection(conn) for conn in connections]
+        
+        # Wait for all sends to complete
+        if send_tasks:
+            await asyncio.gather(*send_tasks, return_exceptions=True)
         
         # Clean up disconnected clients
         if disconnected:

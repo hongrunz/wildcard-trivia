@@ -497,12 +497,18 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     }
 
     if (message.type === 'topic_submitted') {
+      // Always update topics immediately when received (regardless of current state)
+      // Topics will be displayed when the component renders the newRound screen
       // Update submission count
       if (message.submittedCount !== undefined) {
         setTopicSubmissionCount(message.submittedCount);
       }
-      // Add topic to collected topics if provided in message
-      if (message.topic) {
+      // Use full topics array if provided (most up-to-date), otherwise append single topic
+      if (Array.isArray(message.topics) && message.topics.length > 0) {
+        // Use the full list from backend to ensure we're in sync - this is the fastest update
+        setCollectedTopics(Array.from(new Set(message.topics.map((t: string) => t.trim()).filter(Boolean))));
+      } else if (message.topic) {
+        // Fallback: add single topic if full list not available
         setCollectedTopics(prev => {
           // Avoid duplicates
           if (!prev.includes(message.topic!)) {
@@ -519,6 +525,10 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     if (message.type === 'all_topics_submitted') {
       // All topics collected - Trivi is now generating questions
       setIsGeneratingQuestions(true);
+      // Update topics list if provided
+      if (Array.isArray(message.topics) && message.topics.length > 0) {
+        setCollectedTopics(Array.from(new Set(message.topics.map((t: string) => t.trim()).filter(Boolean))));
+      }
       // The backend will broadcast round_changed when questions are ready
       return;
     }
