@@ -375,10 +375,10 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     }
   }, [state.context.room]);
 
-  // Timeout: if we're still loading with no room after 40s, show error + retry
+  // Timeout: if we're still loading with no room after 50s, show error + retry
   useEffect(() => {
     if (state.value !== 'loading' || state.context.room || !roomId) return;
-    const t = setTimeout(() => setLoadTimedOut(true), 40000);
+    const t = setTimeout(() => setLoadTimedOut(true), 50000);
     return () => clearTimeout(t);
   }, [state.value, state.context.room, roomId]);
 

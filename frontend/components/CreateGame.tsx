@@ -164,7 +164,7 @@ export default function CreateGame() {
               </FieldContainer>
 
               <FieldContainer>
-                <Label htmlFor="timeLimit">Time limit per question</Label>
+                <Label htmlFor="timeLimit">Time limit per question (seconds)</Label>
                 <Input
                   id="timeLimit"
                   type="number"
