@@ -58,8 +58,6 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
   // Voice commentary hook (must be before callbacks that use it)
   const {
     playQuestionAudio,
-    playEventCommentary,
-    playCommentary,
     isPlaying: isCommentaryPlaying,
   } = useVoiceCommentary(roomId, { volume: 0.8, autoPlay: true });
 
@@ -244,7 +242,6 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     playerId?: string;
     topic?: string;
     topics?: string[];
-    audioUrl?: string;
     text?: string;
     eventType?: string;
     data?: Record<string, unknown>;
@@ -348,20 +345,7 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
       send({ type: 'PLAYER_JOINED', player: message.player });
     }
 
-    // Handle commentary messages from WebSocket
-    if (message.type === 'commentary_ready' && message.audioUrl) {
-      // Lower background music volume during commentary
-      setMusicVolume(0.1);
-      playCommentary(message.audioUrl, message.text, false);
-    }
-
-    if (message.type === 'commentary_event' && message.eventType) {
-      // Lower background music volume during commentary
-      setMusicVolume(0.1);
-      playEventCommentary(message.eventType, message.data || {}, message.priority || false);
-    }
-
-  }, [fetchRoom, roomId, send, playCommentary, playEventCommentary, setMusicVolume]);
+  }, [fetchRoom, roomId, send, setMusicVolume]);
 
   // Fetch leaderboard only when we enter answer-reveal (submitted) state; track points gained for animation
   const prevStateRef = useRef<string | undefined>(undefined);

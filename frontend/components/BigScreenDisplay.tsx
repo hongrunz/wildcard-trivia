@@ -85,8 +85,6 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
   // Voice commentary hook (must be before callbacks/effects that use it)
   const {
     playQuestionAudio,
-    playEventCommentary,
-    playCommentary,
     isPlaying: isCommentaryPlaying,
   } = useVoiceCommentary(roomId, { volume: 0.8, autoPlay: true });
 
@@ -341,10 +339,10 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     }
   }, [state.context.room]);
 
-  // Timeout: if we're still loading with no room after 30s, show error + retry
+  // Timeout: if we're still loading with no room after 40s, show error + retry
   useEffect(() => {
     if (state.value !== 'loading' || state.context.room || !roomId) return;
-    const t = setTimeout(() => setLoadTimedOut(true), 30000);
+    const t = setTimeout(() => setLoadTimedOut(true), 40000);
     return () => clearTimeout(t);
   }, [state.value, state.context.room, roomId]);
 
@@ -419,7 +417,6 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
     topic?: string;
     topics?: string[];
     nextRound?: number;
-    audioUrl?: string;
     text?: string;
     eventType?: string;
     data?: Record<string, unknown>;
@@ -542,15 +539,7 @@ export default function BigScreenDisplay({ roomId }: BigScreenDisplayProps) {
       send({ type: 'PLAYER_JOINED', player: message.player });
     }
 
-    // Handle commentary messages from WebSocket
-    if (message.type === 'commentary_ready' && message.audioUrl) {
-      playCommentary(message.audioUrl, message.text, false);
-    }
-
-    if (message.type === 'commentary_event' && message.eventType) {
-      playEventCommentary(message.eventType, message.data || {}, message.priority || false);
-    }
-  }, [fetchRoom, fetchLeaderboard, roomId, send, playCommentary, playEventCommentary]);
+  }, [fetchRoom, fetchLeaderboard, roomId, send]);
 
   const handleRetryStartGame = useCallback(() => {
     setStartGameError(null);

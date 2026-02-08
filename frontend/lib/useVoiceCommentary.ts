@@ -195,27 +195,6 @@ export function useVoiceCommentary(
   }, [isMuted, processQueue]);
 
   /**
-   * Generate and play on-demand commentary for a game event
-   */
-  const playEventCommentary = useCallback(async (
-    eventType: string,
-    data: Record<string, any> = {},
-    priority: boolean = false
-  ) => {
-    if (!roomId) {
-      console.warn('Cannot generate commentary: roomId is missing');
-      return;
-    }
-
-    try {
-      const response = await api.generateCommentary(roomId, eventType, data);
-      playCommentary(response.audioUrl, response.text, priority);
-    } catch (error) {
-      console.error('Failed to generate commentary:', error);
-    }
-  }, [roomId, playCommentary]);
-
-  /**
    * Play pre-generated question audio
    */
   const playQuestionAudio = useCallback((audioUrl: string | null | undefined) => {
@@ -286,7 +265,6 @@ export function useVoiceCommentary(
     toggleMute,
     setVolume,
     playCommentary,
-    playEventCommentary,
     playQuestionAudio,
     clearQueue,
     skip,

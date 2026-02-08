@@ -12,7 +12,6 @@ from storage.store import RoomStore, PlayerStore, QuestionStore, TopicStore
 from apis.llm.prompts import generate_questions_with_llm
 from apis.websocket import manager
 from apis.tts import get_audio_url
-from apis.tts.prompts import render_commentary
 from storage.client import get_redis_client
 import asyncio
 import logging
@@ -106,9 +105,6 @@ def _question_explanation_audio_url_key(question_id: str) -> str:
     return f"question:{question_id}:explanation_audio_url"
 
 
-def _commentary_key(room_id: str, commentary_id: str) -> str:
-    """Get Redis key for commentary audio"""
-    return f"room:{room_id}:commentary:{commentary_id}"
 
 
 async def _generate_question_audio(question_text: str, question_id: str) -> Optional[str]:
@@ -457,26 +453,6 @@ async def start_game(room_id: str, hostToken: Optional[str] = Header(None, alias
             "questionsCount": len(sample_questions)
         })
         
-        # Broadcast commentary event for game started
-        try:
-            commentary_text = render_commentary("game_started", {})
-            cache_key = _commentary_key(room_id, "game_started")
-            audio_url = await asyncio.to_thread(
-                lambda: get_audio_url(
-                    commentary_text,
-                    cache_key,
-                    voice_config={"style": "game_show_host"},
-                )
-            )
-            await manager.broadcast_to_room(room_id, {
-                "type": "commentary_ready",
-                "eventType": "game_started",
-                "audioUrl": audio_url,
-                "text": commentary_text,
-            })
-        except Exception as e:
-            logger.error(f"Failed to generate game_started commentary: {e}")
-        
         return StartGameResponse(
             success=True,
             message="Game started successfully",
@@ -747,31 +723,6 @@ async def submit_topic(
                 "questionsCount": len(sample_questions)
             })
             
-            # Broadcast round finished commentary (for previous round)
-            try:
-                prev_round = next_round - 1
-                commentary_text = render_commentary("round_finished", {
-                    "round": prev_round,
-                })
-                commentary_id = f"round_finished_{prev_round}"
-                cache_key = _commentary_key(room_id, commentary_id)
-                audio_url = await asyncio.to_thread(
-                    lambda: get_audio_url(
-                        commentary_text,
-                        cache_key,
-                        voice_config={"style": "game_show_host"},
-                    )
-                )
-                await manager.broadcast_to_room(room_id, {
-                    "type": "commentary_ready",
-                    "eventType": "round_finished",
-                    "audioUrl": audio_url,
-                    "text": commentary_text,
-                    "commentaryId": commentary_id,
-                })
-            except Exception as e:
-                logger.error(f"Failed to generate round_finished commentary: {e}")
-        
         return SubmitTopicResponse(
             success=True,
             submittedCount=submitted_count,
@@ -923,103 +874,3 @@ async def get_game_stats(room_id: str):
 
 # --- TTS Commentary Endpoints ---
 
-class GenerateCommentaryRequest(BaseModel):
-    eventType: str
-    data: dict = {}
-
-
-class GenerateCommentaryResponse(BaseModel):
-    audioUrl: str
-    text: str
-    commentaryId: str
-
-
-@router.post("/{room_id}/generate-commentary", response_model=GenerateCommentaryResponse)
-async def generate_commentary(room_id: str, request: GenerateCommentaryRequest):
-    """Generate on-demand commentary for a game event"""
-    try:
-        room_uuid = UUID(room_id)
-        room = RoomStore.get_room(room_uuid)
-        
-        if not room:
-            raise HTTPException(status_code=404, detail="Room not found")
-        
-        # Render commentary text from template
-        try:
-            commentary_text = render_commentary(request.eventType, request.data)
-            logger.info(f"Generating commentary audio for eventType={request.eventType}, room_id={room_id}: {commentary_text}")
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        
-        # Generate unique commentary ID
-        import secrets
-        commentary_id = secrets.token_urlsafe(16)
-        
-        # Generate TTS audio (run in thread pool to avoid blocking)
-        cache_key = _commentary_key(room_id, commentary_id)
-        try:
-            def _generate():
-                return get_audio_url(
-                    commentary_text,
-                    cache_key,
-                    voice_config={"style": "game_show_host"},
-                )
-            audio_url = await asyncio.to_thread(_generate)
-            logger.info(f"Commentary audio generated successfully for eventType={request.eventType}, commentary_id={commentary_id}")
-        except Exception as e:
-            logger.error(f"Failed to generate TTS for commentary: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to generate audio: {str(e)}")
-        
-        return GenerateCommentaryResponse(
-            audioUrl=audio_url,
-            text=commentary_text,
-            commentaryId=commentary_id
-        )
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid room ID")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/{room_id}/commentary/{commentary_id}")
-async def get_commentary_audio(room_id: str, commentary_id: str):
-    """Stream audio file for commentary"""
-    try:
-        room_uuid = UUID(room_id)
-        room = RoomStore.get_room(room_uuid)
-        
-        if not room:
-            raise HTTPException(status_code=404, detail="Room not found")
-        
-        # Retrieve audio from Redis
-        r = get_redis_client()
-        cache_key = _commentary_key(room_id, commentary_id)
-        cached_b64 = r.get(cache_key)
-        
-        if not cached_b64:
-            raise HTTPException(status_code=404, detail="Commentary audio not found")
-        
-        # Decode base64 and return as audio response
-        import base64
-        from fastapi.responses import Response
-        
-        audio_bytes = base64.b64decode(cached_b64)
-        
-        # Determine content type from audio URL format or default to wav
-        content_type = "audio/wav"
-        
-        return Response(
-            content=audio_bytes,
-            media_type=content_type,
-            headers={
-                "Content-Disposition": f'inline; filename="commentary_{commentary_id}.wav"'
-            }
-        )
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid room ID")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

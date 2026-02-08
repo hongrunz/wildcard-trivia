@@ -210,32 +210,6 @@ export const api = {
     });
   },
 
-  /**
-   * Generate on-demand commentary for a game event
-   */
-  async generateCommentary(
-    roomId: string,
-    eventType: string,
-    data: Record<string, any> = {}
-  ): Promise<{ audioUrl: string; text: string; commentaryId: string }> {
-    return fetchAPI<{ audioUrl: string; text: string; commentaryId: string }>(
-      `/api/rooms/${roomId}/generate-commentary`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ eventType, data }),
-      }
-    );
-  },
-
-  /**
-   * Get commentary audio URL (for streaming)
-   * Note: This returns a blob URL that can be used directly in audio elements
-   */
-  async getCommentaryAudio(roomId: string, commentaryId: string): Promise<string> {
-    const url = `${API_BASE_URL}/api/rooms/${roomId}/commentary/${commentaryId}`;
-    // Return the URL directly - the browser can fetch it as an audio stream
-    return url;
-  },
 };
 
 // Token storage utilities
