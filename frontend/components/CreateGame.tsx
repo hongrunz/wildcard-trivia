@@ -31,7 +31,7 @@ import { api, tokenStorage } from '../lib/api';
 import { useBackgroundMusic } from '../lib/useBackgroundMusic';
 import MusicControl from './MusicControl';
 
-const DEFAULT_NUM_QUESTIONS = 3;
+const DEFAULT_NUM_QUESTIONS = 5;
 const DEFAULT_TIME_LIMIT = 30;
 const DEFAULT_NUM_ROUNDS = 3;
 
