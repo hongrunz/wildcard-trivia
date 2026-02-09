@@ -38,6 +38,9 @@ export default function Onboarding() {
           <OnboardingExplanationText>
             Trivi will find connections between your topics of interest, and make
             the game enjoyable for your whole group!
+            <br />
+            <br />
+            <strong>Recommended for 2-5 players</strong>
           </OnboardingExplanationText>
         </OnboardingExplanationCard>
         <OnboardingButtonWrap>

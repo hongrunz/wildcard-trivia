@@ -255,6 +255,9 @@ export default function StartGame({ roomId }: StartGameProps) {
                     <TriviCommentaryTitle>Share the link!</TriviCommentaryTitle>
                     <TriviCommentaryBody>
                       Players can join using the link. When everyone&apos;s in, hit Start.
+                      <br />
+                      <br />
+                      <strong>Recommended for 2-5 players</strong>
                     </TriviCommentaryBody>
                   </>
                 )}
