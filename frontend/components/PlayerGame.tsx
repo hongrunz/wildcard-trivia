@@ -211,6 +211,41 @@ export default function PlayerGame({ roomId }: PlayerGameProps) {
     }
   }, [currentQuestionIndex]);
 
+  // Play round ending audio when round finishes
+  const roundEndingAudioPlayedRef = useRef<number>(-1);
+  useEffect(() => {
+    const currentRound = state.context.room?.currentRound ?? 0;
+    if (state.value === 'roundFinished' && roundEndingAudioPlayedRef.current !== currentRound) {
+      const audio = new Audio('/assets/audio/round-ending.wav');
+      audio.volume = 0.8;
+      audio.play().catch(() => {
+        // Auto-play prevented by browser - that's okay
+      });
+      roundEndingAudioPlayedRef.current = currentRound;
+    }
+    // Reset when leaving roundFinished state
+    if (state.value !== 'roundFinished') {
+      roundEndingAudioPlayedRef.current = -1;
+    }
+  }, [state.value, state.context.room?.currentRound]);
+
+  // Play game ending audio when game finishes
+  const gameEndingAudioPlayedRef = useRef(false);
+  useEffect(() => {
+    if (state.value === 'finished' && !gameEndingAudioPlayedRef.current) {
+      const audio = new Audio('/assets/audio/game-ending.wav');
+      audio.volume = 0.8;
+      audio.play().catch(() => {
+        // Auto-play prevented by browser - that's okay
+      });
+      gameEndingAudioPlayedRef.current = true;
+    }
+    // Reset when leaving finished state (shouldn't happen, but just in case)
+    if (state.value !== 'finished') {
+      gameEndingAudioPlayedRef.current = false;
+    }
+  }, [state.value]);
+
   // Send TIMER_EXPIRED when question timer runs out (timePerQuestion seconds from when this question started)
   useEffect(() => {
     if (state.value === 'question' && state.context.room?.timePerQuestion && state.context.questionStartedAt) {
