@@ -1,5 +1,3 @@
-# Wildcard Trivia - Gemini3 Hackathon Project
-
 ## Inspiration
 
 Trivia is an iconic social catalyst, yet it is often exclusionary by design. By relying on static, Western-centric knowledge, it creates "cultural dead zones" for those from diverse backgrounds, turning what should be a bridge into a barrier.
@@ -34,18 +32,13 @@ Wildcard Trivia uses Gemini 3 to transform a traditionally static game into a dy
 - **Text-to-Speech:** Gemini Live API (`gemini-2.5-flash-native-audio-preview`) for generating Trivi's voice commentary with Redis caching to minimize latency
 - **Award Generation:** Algorithm-driven award system that analyzes topic-specific performance to create personalized recognition (e.g., "Subject Matter Authority on Cricket", "Sharing a love for K-Pop")
 
-**Key Technical Decisions:**
-- No-login flow: Players join via shareable room URLs with token-based authentication
-- Pre-generated audio: Questions and explanations are synthesized ahead of time and cached
-- Real-time sync: WebSocket broadcasts ensure all players see updates simultaneously
-
 ## Challenges we ran into
 
 Ensuring low-latency text-to-speech (TTS) playback was a major challenge. We experimented with different Google/Gemini TTS products and landed on the Live API, which provides the fastest response. To further optimize, we pre-called and cached TTS audio for each question in parallel before gameplay began, so that audio would play instantly and smoothly when needed.
 
 ## Accomplishments we're proud of
 
-I turned trivia from an exclusive experience into an inclusive one, shipped a seamless audio/visual multiplayer flow, and a unique AI-powered experience that reliably get laughs and spark conversation.
+We turned trivia from an exclusive experience into an inclusive one, shipped a seamless audio/visual multiplayer flow, and a unique AI-powered experience that reliably get laughs and spark conversation.
 
 ## What we learned
 
